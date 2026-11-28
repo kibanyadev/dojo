@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -84,6 +85,37 @@ type Items struct {
 	Chooser StoryChooser
 	// Drafter backs PUT /v1/items/{id}/draft; nil leaves the action not found.
 	Drafter DraftSaver
+	// Submitter backs POST /v1/items/{id}/submit; nil leaves the action not found.
+	Submitter WorkSubmitter
+	// FlagTTL is how long ai_reviews_enabled is cached; zero reads it every time.
+	FlagTTL time.Duration
+
+	flagsOnce sync.Once
+	flags     flagCache
+}
+
+// WorkSubmitter stores one submit of POST /v1/items/{id}/submit.
+type WorkSubmitter interface {
+	SubmitWork(ctx context.Context, in repo.SubmitWorkIn) error
+}
+
+// aiReviewsEnabled is the ai_reviews_enabled flag through the cache; a missing row reads as true.
+func (it *Items) aiReviewsEnabled(ctx context.Context) (bool, error) {
+	it.flagsOnce.Do(func() { it.flags.ttl = it.FlagTTL })
+	return it.flags.enabled(ctx, func(ctx context.Context) (bool, error) {
+		raw, err := it.Reader.GetSystemFlag(ctx, "ai_reviews_enabled")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return true, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		var enabled bool
+		if err := json.Unmarshal(raw, &enabled); err != nil {
+			return false, fmt.Errorf("ai_reviews_enabled: %w", err)
+		}
+		return enabled, nil
+	})
 }
 
 const maxAnswerBody = 1 << 10
@@ -93,8 +125,8 @@ type answerRequest struct {
 	Choice   *int    `json:"choice"`
 }
 
-// postItemRoute is the POST /v1/items/ dispatcher. Only answers and choice are served so far; every
-// other action word, a bare id and a malformed path are not found.
+// postItemRoute is the POST /v1/items/ dispatcher: answers, choice and submit; every other action
+// word, a bare id and a malformed path are not found.
 func (a Auth) postItemRoute(w http.ResponseWriter, r *http.Request) {
 	id, action, ok := parseItemPath(r.URL.Path)
 	switch {
@@ -102,6 +134,8 @@ func (a Auth) postItemRoute(w http.ResponseWriter, r *http.Request) {
 		a.Items.answer(w, r, id)
 	case ok && action == "choice" && a.Items.Chooser != nil:
 		a.Items.choose(w, r, id)
+	case ok && action == "submit" && a.Items.Submitter != nil:
+		a.Items.submit(w, r, id)
 	default:
 		writeError(w, http.StatusNotFound, "not_found")
 	}
@@ -297,56 +331,54 @@ func (a Auth) getItemRoute(w http.ResponseWriter, r *http.Request) {
 
 func (it *Items) read(w http.ResponseWriter, r *http.Request, id string) {
 	p, _ := principalOf(r.Context())
-	ctx := r.Context()
-	view, err := it.Reader.GetItemView(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) {
+	out, err := it.view(r.Context(), p.learner, id)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
 		writeError(w, http.StatusNotFound, "not_found")
-		return
-	}
-	if err != nil {
+	case err != nil:
 		readFailed(w, r, err)
-		return
+	default:
+		writeNoStore(w, out)
 	}
-	done, err := it.Reader.ItemIsDone(ctx, repo.ItemIsDoneParams{LearnerID: p.learner, ItemID: id})
+}
+
+// view builds the learner's view of an item; pgx.ErrNoRows means no such item or a kind this route
+// does not serve.
+func (it *Items) view(ctx context.Context, learner pgtype.UUID, id string) (any, error) {
+	view, err := it.Reader.GetItemView(ctx, id)
 	if err != nil {
-		readFailed(w, r, err)
-		return
+		return nil, err
+	}
+	done, err := it.Reader.ItemIsDone(ctx, repo.ItemIsDoneParams{LearnerID: learner, ItemID: id})
+	if err != nil {
+		return nil, err
 	}
 	head := itemHead{ID: view.ID, Kind: view.Kind, Role: view.Role, Title: view.Title, EstMinutes: view.EstMinutes,
 		Tags: view.Tags, Done: done}
 	if head.Tags == nil {
 		head.Tags = []string{}
 	}
-	var out any
 	switch view.Kind {
 	case "quiz":
-		var answers []repo.ListQuizAnswersRow
-		if answers, err = it.Reader.ListQuizAnswers(ctx, repo.ListQuizAnswersParams{LearnerID: p.learner, ItemID: id}); err == nil {
-			out, err = buildQuiz(head, view.Payload, answers)
+		answers, err := it.Reader.ListQuizAnswers(ctx, repo.ListQuizAnswersParams{LearnerID: learner, ItemID: id})
+		if err != nil {
+			return nil, err
 		}
+		return buildQuiz(head, view.Payload, answers)
 	case "story":
 		var chosen *repo.GetStoryChoiceRow
-		row, gerr := it.Reader.GetStoryChoice(ctx, repo.GetStoryChoiceParams{LearnerID: p.learner, ItemID: id})
+		row, err := it.Reader.GetStoryChoice(ctx, repo.GetStoryChoiceParams{LearnerID: learner, ItemID: id})
 		switch {
-		case gerr == nil:
+		case err == nil:
 			chosen = &row
-		case !errors.Is(gerr, pgx.ErrNoRows):
-			err = gerr
+		case !errors.Is(err, pgx.ErrNoRows):
+			return nil, err
 		}
-		if err == nil {
-			out, err = buildStory(head, view.Payload, chosen)
-		}
+		return buildStory(head, view.Payload, chosen)
 	case "writing", "feedback":
-		out, err = it.buildWritten(ctx, head, view, p.learner)
-	default:
-		writeError(w, http.StatusNotFound, "not_found")
-		return
+		return it.buildWritten(ctx, head, view, learner)
 	}
-	if err != nil {
-		readFailed(w, r, err)
-		return
-	}
-	writeNoStore(w, out)
+	return nil, pgx.ErrNoRows
 }
 
 type awardsMarkView struct {
@@ -433,16 +465,9 @@ func (it *Items) readWork(ctx context.Context, learner pgtype.UUID, id string) (
 	if row.ReviewState.Valid {
 		state := row.ReviewState.String
 		if state == "pending" {
-			raw, err := it.Reader.GetSystemFlag(ctx, "ai_reviews_enabled")
-			enabled := true
-			switch {
-			case errors.Is(err, pgx.ErrNoRows):
-			case err != nil:
+			enabled, err := it.aiReviewsEnabled(ctx)
+			if err != nil {
 				return nil, err
-			default:
-				if err := json.Unmarshal(raw, &enabled); err != nil {
-					return nil, fmt.Errorf("ai_reviews_enabled: %w", err)
-				}
 			}
 			if !enabled {
 				state = "paused"
@@ -497,4 +522,43 @@ func (it *Items) saveDraft(w http.ResponseWriter, r *http.Request, id string) {
 	default:
 		writeNoStore(w, map[string]string{"draft_saved_at": saved.UTC().Format(time.RFC3339)})
 	}
+}
+
+// submit is POST /v1/items/{id}/submit. The body is trimmed before the 1 to 4,000 character rule and
+// stored trimmed; nothing the learner wrote reaches an error or a log.
+func (it *Items) submit(w http.ResponseWriter, r *http.Request, id string) {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxDraftBody))
+	dec.DisallowUnknownFields()
+	var req draftRequest
+	if err := dec.Decode(&req); err != nil || dec.Decode(&struct{}{}) != io.EOF || req.Body == nil || strings.ContainsRune(*req.Body, 0) {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	body := strings.TrimSpace(*req.Body)
+	if n := utf8.RuneCountInString(body); n < 1 || n > maxDraftChars {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	p, _ := principalOf(r.Context())
+	ctx := context.WithoutCancel(r.Context())
+	err := it.Submitter.SubmitWork(ctx, repo.SubmitWorkIn{Learner: p.learner, ItemID: id, Body: body})
+	switch {
+	case errors.Is(err, repo.ErrItemNotFound):
+		writeError(w, http.StatusNotFound, "not_found")
+		return
+	case errors.Is(err, repo.ErrLearnerGone):
+		writeError(w, http.StatusUnauthorized, "unauthenticated")
+		return
+	case err != nil:
+		slog.Error("submit failed", "route", r.Pattern, "error", err)
+		writeError(w, http.StatusInternalServerError, "server_error")
+		return
+	}
+	item, err := it.view(ctx, p.learner, id)
+	if err != nil {
+		readFailed(w, r, err)
+		return
+	}
+	// awarded stays empty until the belt marks arrive with the inbox (PR 21).
+	writeNoStore(w, map[string]any{"item": item, "awarded": []any{}})
 }

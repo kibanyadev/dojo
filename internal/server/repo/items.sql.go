@@ -11,6 +11,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countReviewCallsToday = `-- name: CountReviewCallsToday :one
+SELECT count(*) FROM ai_reviews
+WHERE learner_id = $1 AND outcome IN ('ok', 'invalid')
+  AND created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+`
+
+// The hidden daily cap: this learner's review calls of the current UTC day that reached the model.
+func (q *Queries) CountReviewCallsToday(ctx context.Context, learnerID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countReviewCallsToday, learnerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getItemView = `-- name: GetItemView :one
 
 SELECT i.id, r.slug AS role, i.kind, i.title, i.est_minutes, i.tags, i.payload,
@@ -227,6 +241,39 @@ func (q *Queries) ListQuizAnswers(ctx context.Context, arg ListQuizAnswersParams
 		return nil, err
 	}
 	return items, nil
+}
+
+const submitWork = `-- name: SubmitWork :exec
+INSERT INTO written_work (org_id, learner_id, item_id, draft, draft_saved_at, body, first_submitted_at, submitted_at,
+                          submit_count, review_state, review_next_at)
+VALUES ($1, $2, $3, $4::text, now(), $4::text, now(), now(), 1, $5::text, now())
+ON CONFLICT (learner_id, item_id) DO UPDATE
+SET draft = EXCLUDED.draft, draft_saved_at = now(), body = EXCLUDED.body,
+    first_submitted_at = COALESCE(written_work.first_submitted_at, EXCLUDED.first_submitted_at),
+    submitted_at = now(), submit_count = written_work.submit_count + 1, review_state = EXCLUDED.review_state,
+    review_tries = 0, review_next_at = now(), updated_at = now()
+`
+
+type SubmitWorkParams struct {
+	OrgID     pgtype.UUID
+	LearnerID pgtype.UUID
+	ItemID    string
+	Body      string
+	State     string
+}
+
+// POST /v1/items/{id}/submit: the work, written under the learner's class-1 lock. The body also becomes
+// the draft; first_submitted_at keeps its first value; the last finished review stays until a new one
+// lands; tries start over. @state is pending or capped.
+func (q *Queries) SubmitWork(ctx context.Context, arg SubmitWorkParams) error {
+	_, err := q.db.Exec(ctx, submitWork,
+		arg.OrgID,
+		arg.LearnerID,
+		arg.ItemID,
+		arg.Body,
+		arg.State,
+	)
+	return err
 }
 
 const upsertDraft = `-- name: UpsertDraft :one
