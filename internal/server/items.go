@@ -9,8 +9,11 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/kibanyadev/dojo/internal/catalog"
 	"github.com/kibanyadev/dojo/internal/server/repo"
@@ -52,6 +55,13 @@ type ItemReader interface {
 	ItemIsDone(ctx context.Context, arg repo.ItemIsDoneParams) (bool, error)
 	ListQuizAnswers(ctx context.Context, arg repo.ListQuizAnswersParams) ([]repo.ListQuizAnswersRow, error)
 	GetStoryChoice(ctx context.Context, arg repo.GetStoryChoiceParams) (repo.GetStoryChoiceRow, error)
+	GetWrittenWork(ctx context.Context, arg repo.GetWrittenWorkParams) (repo.GetWrittenWorkRow, error)
+	GetSystemFlag(ctx context.Context, key string) ([]byte, error)
+}
+
+// DraftSaver stores one autosave of PUT /v1/items/{id}/draft.
+type DraftSaver interface {
+	SaveDraft(ctx context.Context, in repo.SaveDraftIn) (time.Time, error)
 }
 
 // QuizAnswerer records one answer of POST /v1/items/{id}/answers.
@@ -72,6 +82,8 @@ type Items struct {
 	Answerer QuizAnswerer
 	// Chooser backs POST /v1/items/{id}/choice; nil leaves the action not found.
 	Chooser StoryChooser
+	// Drafter backs PUT /v1/items/{id}/draft; nil leaves the action not found.
+	Drafter DraftSaver
 }
 
 const maxAnswerBody = 1 << 10
@@ -324,6 +336,8 @@ func (it *Items) read(w http.ResponseWriter, r *http.Request, id string) {
 		if err == nil {
 			out, err = buildStory(head, view.Payload, chosen)
 		}
+	case "writing", "feedback":
+		out, err = it.buildWritten(ctx, head, view, p.learner)
 	default:
 		writeError(w, http.StatusNotFound, "not_found")
 		return
@@ -333,4 +347,154 @@ func (it *Items) read(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	writeNoStore(w, out)
+}
+
+type awardsMarkView struct {
+	Slug  string `json:"slug"`
+	Title string `json:"title"`
+	Held  bool   `json:"held"`
+}
+
+// workView is the learner's own row; review is the last finished review as stored.
+type workView struct {
+	Draft        string          `json:"draft"`
+	DraftSavedAt string          `json:"draft_saved_at"`
+	Body         *string         `json:"body"`
+	SubmittedAt  *string         `json:"submitted_at"`
+	SubmitCount  int32           `json:"submit_count"`
+	ReviewState  *string         `json:"review_state"`
+	ReviewedAt   *string         `json:"reviewed_at"`
+	Review       json.RawMessage `json:"review"`
+}
+
+type writingView struct {
+	itemHead
+	Prompt     string              `json:"prompt"`
+	Rubric     []catalog.Criterion `json:"rubric"`
+	AwardsMark *awardsMarkView     `json:"awards_mark"`
+	Work       *workView           `json:"work"`
+}
+
+type feedbackView struct {
+	itemHead
+	From       catalog.From        `json:"from"`
+	Scene      string              `json:"scene"`
+	Rubric     []catalog.Criterion `json:"rubric"`
+	AwardsMark *awardsMarkView     `json:"awards_mark"`
+	Work       *workView           `json:"work"`
+}
+
+// buildWritten answers a writing or feedback item. Until belt_awards exists (PR 21) a mark is never held.
+func (it *Items) buildWritten(ctx context.Context, head itemHead, view repo.GetItemViewRow, learner pgtype.UUID) (any, error) {
+	var mark *awardsMarkView
+	if view.AwardsMarkSlug.Valid {
+		mark = &awardsMarkView{Slug: view.AwardsMarkSlug.String, Title: view.AwardsMarkTitle.String}
+	}
+	work, err := it.readWork(ctx, learner, head.ID)
+	if err != nil {
+		return nil, err
+	}
+	if view.Kind == "writing" {
+		var p catalog.Writing
+		if err := json.Unmarshal(view.Payload, &p); err != nil {
+			return nil, fmt.Errorf("writing payload: %w", err)
+		}
+		return writingView{itemHead: head, Prompt: p.Prompt, Rubric: nonNilRubric(p.Rubric), AwardsMark: mark, Work: work}, nil
+	}
+	var p catalog.Feedback
+	if err := json.Unmarshal(view.Payload, &p); err != nil {
+		return nil, fmt.Errorf("feedback payload: %w", err)
+	}
+	return feedbackView{itemHead: head, From: p.From, Scene: p.Scene, Rubric: nonNilRubric(p.Rubric), AwardsMark: mark, Work: work}, nil
+}
+
+func nonNilRubric(r []catalog.Criterion) []catalog.Criterion {
+	if r == nil {
+		return []catalog.Criterion{}
+	}
+	return r
+}
+
+// readWork is the learner's work, nil before the first draft or submit. A pending review reads as
+// paused while ai_reviews_enabled is false; that is derived here and never stored.
+func (it *Items) readWork(ctx context.Context, learner pgtype.UUID, id string) (*workView, error) {
+	row, err := it.Reader.GetWrittenWork(ctx, repo.GetWrittenWorkParams{LearnerID: learner, ItemID: id})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	w := &workView{Draft: row.Draft, DraftSavedAt: *timePtr(row.DraftSavedAt), SubmittedAt: timePtr(row.SubmittedAt),
+		SubmitCount: row.SubmitCount, ReviewedAt: timePtr(row.ReviewedAt), Review: row.Review}
+	if row.Body.Valid {
+		w.Body = &row.Body.String
+	}
+	if row.ReviewState.Valid {
+		state := row.ReviewState.String
+		if state == "pending" {
+			raw, err := it.Reader.GetSystemFlag(ctx, "ai_reviews_enabled")
+			enabled := true
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+			case err != nil:
+				return nil, err
+			default:
+				if err := json.Unmarshal(raw, &enabled); err != nil {
+					return nil, fmt.Errorf("ai_reviews_enabled: %w", err)
+				}
+			}
+			if !enabled {
+				state = "paused"
+			}
+		}
+		w.ReviewState = &state
+	}
+	return w, nil
+}
+
+// maxDraftChars and maxDraftBody: 4,000 characters (design 3.10), so at most 12 bytes each when
+// every one is a JSON-escaped surrogate pair, plus the envelope; the byte cap only bounds the read.
+const (
+	maxDraftChars = 4000
+	maxDraftBody  = 64 << 10
+)
+
+type draftRequest struct {
+	Body *string `json:"body"`
+}
+
+// putItemRoute is the PUT /v1/items/ dispatcher: only draft is served, and only for a writing or
+// feedback item (the store answers not found for any other kind).
+func (a Auth) putItemRoute(w http.ResponseWriter, r *http.Request) {
+	id, action, ok := parseItemPath(r.URL.Path)
+	if !ok || action != "draft" || a.Items.Drafter == nil {
+		writeError(w, http.StatusNotFound, "not_found")
+		return
+	}
+	a.Items.saveDraft(w, r, id)
+}
+
+func (it *Items) saveDraft(w http.ResponseWriter, r *http.Request, id string) {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxDraftBody))
+	dec.DisallowUnknownFields()
+	var req draftRequest
+	if err := dec.Decode(&req); err != nil || dec.Decode(&struct{}{}) != io.EOF || req.Body == nil ||
+		utf8.RuneCountInString(*req.Body) > maxDraftChars || strings.ContainsRune(*req.Body, 0) {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	p, _ := principalOf(r.Context())
+	saved, err := it.Drafter.SaveDraft(context.WithoutCancel(r.Context()), repo.SaveDraftIn{Learner: p.learner, ItemID: id, Draft: *req.Body})
+	switch {
+	case errors.Is(err, repo.ErrItemNotFound):
+		writeError(w, http.StatusNotFound, "not_found")
+	case errors.Is(err, repo.ErrLearnerGone):
+		writeError(w, http.StatusUnauthorized, "unauthenticated")
+	case err != nil:
+		slog.Error("draft save failed", "route", r.Pattern, "error", err)
+		writeError(w, http.StatusInternalServerError, "server_error")
+	default:
+		writeNoStore(w, map[string]string{"draft_saved_at": saved.UTC().Format(time.RFC3339)})
+	}
 }
