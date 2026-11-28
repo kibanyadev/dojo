@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { routes } from '../routes';
 import { parseBlocks } from '../lib/markdown';
 import { readBlockedUntil, resetReadBlock, type Ticket, type TicketProgress } from '../lib/read';
+import { setOffline } from '../lib/offline';
 import { duration, shortDate, viewOf } from './Ticket';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -369,5 +370,53 @@ describe('Ticket failures', () => {
     await settle();
     expect(container.querySelector('h1')?.textContent).toBe('Ticket');
     expect(text()).toContain('Loading the ticket...');
+  });
+});
+
+describe('Ticket offline (W4)', () => {
+  afterEach(() => setOffline(false));
+
+  async function mountOffline(t: Ticket) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method && init.method !== 'GET') {
+          posts.push(url);
+          return Response.json({});
+        }
+        if (url === '/v1/me') return Response.json(me, { headers: { 'X-Dojo-Offline': '1' } });
+        if (url === `/v1/tickets/${ID}`) return Response.json(t, { headers: { 'X-Dojo-Offline': '1' } });
+        return new Response(null, { status: 404 });
+      }),
+    );
+    posts = [];
+    router = createMemoryRouter(routes, { initialEntries: [`/t/${ID}`] });
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={new QueryClient()}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      );
+    });
+    await settle();
+  }
+
+  it('shows the banner, keeps the opened hints and disables the writes', async () => {
+    await mountOffline(ticket({ hints: [{ n: 1, text: HINTS[0] ?? '' }], progress: progress() }));
+    const banner = container.querySelector('[role=status]');
+    expect(text()).toContain('You are offline. Your lab keeps running on your laptop, and dojo check results show here when you are back.');
+    expect(banner).not.toBeNull();
+    expect(text()).toContain('Read ls -ld shared');
+    expect(text()).toContain('Written hints are saved with the ticket. Asking Carmen waits for your connection.');
+    expect((button('Show hint 2') as HTMLButtonElement).disabled).toBe(true);
+    expect((button('Report a broken ticket') as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => button('Show hint 2')?.click());
+    expect(posts).toEqual([]);
+  });
+
+  it('shows no banner online', async () => {
+    await mount(ticket());
+    expect(text()).not.toContain('You are offline');
+    expect((button('Show hint 1') as HTMLButtonElement).disabled).toBe(false);
   });
 });

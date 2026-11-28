@@ -159,6 +159,26 @@ describe('sign out', () => {
     expect(router.state.location.pathname).toBe('/signin');
   });
 
+  it('tells the service worker to clear its data cache before the logout request', async () => {
+    const order: string[] = [];
+    const postMessage = vi.fn((msg: { type: string }, ports: MessagePort[]) => {
+      order.push(msg.type);
+      ports[0]?.postMessage('cleared');
+    });
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: { controller: { postMessage } } });
+    try {
+      stubApi((url, m, out) => {
+        if (url === '/v1/auth/logout') order.push(m);
+        return url === '/v1/me' ? (out.loggedOut ? 401 : me) : 204;
+      });
+      await mount('/');
+      await clickSignOut();
+      expect(order.slice(0, 2)).toEqual(['clear', 'POST']);
+    } finally {
+      Reflect.deleteProperty(navigator, 'serviceWorker');
+    }
+  });
+
   it.each([401, 404])('goes to O1 on %i', async (status) => {
     const today = { current: null, next: null, role: null, all_passed: false };
     stubApi((url, _m, out) => (url === '/v1/me' ? (out.loggedOut ? 401 : me) : url === '/v1/today' ? today : status));

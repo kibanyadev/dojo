@@ -1,4 +1,5 @@
 import { apiFetch } from './api';
+import { clearDataCache } from './pwa';
 import type { Me } from './me';
 
 export type Language = 'en' | 'es';
@@ -79,12 +80,15 @@ export const DELETE_MESSAGES: Record<Exclude<DeleteFailure, 'signed_out'>, strin
 
 /** DELETE /v1/me with the GitHub login as confirmation; 204 means the account is gone and the session cookie cleared. */
 export async function deleteMe(confirm: string): Promise<DeleteResult> {
+  await clearDataCache();
   let res: Response;
   try {
     res = await apiFetch('/v1/me', { method: 'DELETE', body: JSON.stringify({ confirm }) });
   } catch {
+    await clearDataCache();
     return { ok: false, reason: 'failed' };
   }
+  await clearDataCache();
   if (res.status === 204 || res.ok) return { ok: true };
   if (res.status === 401) return { ok: false, reason: 'signed_out' };
   if (res.status === 429) return { ok: false, reason: 'rate_limited' };
