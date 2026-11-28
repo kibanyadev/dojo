@@ -33,3 +33,10 @@ SELECT EXISTS (
     SELECT 1 FROM belt_awards a JOIN belt_marks m ON m.id = a.mark_id
     WHERE a.learner_id = @learner_id AND m.slug = @slug
 ) AS held;
+
+-- Every mark in belt order then place, with the time this learner earned it (null when not held).
+-- name: ListLearnerBeltMarks :many
+SELECT m.slug, m.belt, m.title, m.summary, a.awarded_at
+FROM belt_marks m
+LEFT JOIN belt_awards a ON a.mark_id = m.id AND a.learner_id = @learner_id
+ORDER BY array_position(ARRAY['white', 'yellow', 'orange', 'green', 'blue', 'brown', 'black'], m.belt), m.position;

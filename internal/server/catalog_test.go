@@ -23,6 +23,7 @@ type fakeCatalog struct {
 	items    []repo.ListCatalogItemsRow
 	marks    []repo.ListCatalogMarksRow
 	practice []repo.ListPracticeItemsRow
+	beltRows []repo.ListLearnerBeltMarksRow
 	progress []repo.ListLearnerTicketStatesRow
 	done     []string
 	days     []repo.ListLearnerActivityDaysRow
@@ -66,6 +67,10 @@ func (f *fakeCatalog) ListCatalogItems(context.Context) ([]repo.ListCatalogItems
 
 func (f *fakeCatalog) ListPracticeItems(context.Context) ([]repo.ListPracticeItemsRow, error) {
 	return f.practice, f.err
+}
+
+func (f *fakeCatalog) ListLearnerBeltMarks(context.Context, pgtype.UUID) ([]repo.ListLearnerBeltMarksRow, error) {
+	return f.beltRows, f.err
 }
 
 func (f *fakeCatalog) ListCatalogMarks(context.Context) ([]repo.ListCatalogMarksRow, error) {
@@ -280,7 +285,7 @@ func TestPathReportsTheChosenPath(t *testing.T) {
 }
 
 func TestCatalogRoutesRefuse(t *testing.T) {
-	for _, route := range []string{"/v1/catalog", "/v1/path", "/v1/today", "/v1/activity"} {
+	for _, route := range []string{"/v1/catalog", "/v1/path", "/v1/today", "/v1/activity", "/v1/belt"} {
 		if rec := getCatalogRoute(t, populatedCatalog(), route, false, true); rec.Code != 401 || rec.Body.String() != "{\"error\":\"unauthenticated\"}\n" {
 			t.Fatalf("%s anonymous: %d %s", route, rec.Code, rec.Body)
 		}
