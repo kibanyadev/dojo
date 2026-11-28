@@ -2,10 +2,14 @@ package server
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // DefaultFlagCacheTTL is how long the API keeps ai_reviews_enabled (design 3.10: 30 s).
@@ -59,4 +63,34 @@ func (c *flagCache) enabled(ctx context.Context, load func(context.Context) (boo
 		c.mu.Unlock()
 	}
 	return v, nil
+}
+
+// SystemFlagReader reads one system_flags value.
+type SystemFlagReader interface {
+	GetSystemFlag(ctx context.Context, key string) ([]byte, error)
+}
+
+// loadReviewsEnabled reads ai_reviews_enabled; a missing row reads as true.
+func loadReviewsEnabled(r SystemFlagReader) func(context.Context) (bool, error) {
+	return func(ctx context.Context) (bool, error) {
+		raw, err := r.GetSystemFlag(ctx, "ai_reviews_enabled")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return true, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		var enabled bool
+		if err := json.Unmarshal(raw, &enabled); err != nil {
+			return false, fmt.Errorf("ai_reviews_enabled: %w", err)
+		}
+		return enabled, nil
+	}
+}
+
+// NewReviewsEnabled is ai_reviews_enabled through its own cache of ttl, for the review worker.
+func NewReviewsEnabled(r SystemFlagReader, ttl time.Duration) func(context.Context) (bool, error) {
+	c := &flagCache{ttl: ttl}
+	load := loadReviewsEnabled(r)
+	return func(ctx context.Context) (bool, error) { return c.enabled(ctx, load) }
 }

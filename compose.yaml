@@ -195,6 +195,9 @@ services:
       DOJO_GITHUB_READ_TOKEN: ${DOJO_GITHUB_READ_TOKEN:-}
       DOJO_COMMIT_VERIFY_INTERVAL_SECONDS: ${DOJO_COMMIT_VERIFY_INTERVAL_SECONDS:-60}
       DOJO_COMMIT_VERIFY_BATCH: ${DOJO_COMMIT_VERIFY_BATCH:-20}
+      DOJO_AI_ADAPTER: ${DOJO_AI_ADAPTER:-standin}
+      DOJO_REVIEW_INTERVAL_SECONDS: ${DOJO_REVIEW_INTERVAL_SECONDS:-10}
+      DOJO_REVIEW_BATCH: ${DOJO_REVIEW_BATCH:-5}
       TERMS_VERSION: ${TERMS_VERSION:?copy .env.example to .env}
       AUTH_STATE_KEY: ${AUTH_STATE_KEY:-local-dev-state-key-not-a-secret-0123456789}
       DATABASE_URL: postgres://dojo_api:${DOJO_API_DB_PASSWORD:?copy .env.example to .env}@db:5432/dojo?sslmode=disable&application_name=dojo-api
