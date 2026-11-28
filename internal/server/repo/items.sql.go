@@ -87,6 +87,32 @@ func (q *Queries) InsertItemCompletion(ctx context.Context, arg InsertItemComple
 	return item_id, err
 }
 
+const insertStoryChoice = `-- name: InsertStoryChoice :one
+INSERT INTO story_choices (org_id, learner_id, item_id, choice_id)
+VALUES ($1, $2, $3, $4)
+RETURNING chosen_at
+`
+
+type InsertStoryChoiceParams struct {
+	OrgID     pgtype.UUID
+	LearnerID pgtype.UUID
+	ItemID    string
+	ChoiceID  string
+}
+
+// POST /v1/items/{id}/choice: the choice is final (no UPDATE grant). Run under the learner's class-1 lock.
+func (q *Queries) InsertStoryChoice(ctx context.Context, arg InsertStoryChoiceParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, insertStoryChoice,
+		arg.OrgID,
+		arg.LearnerID,
+		arg.ItemID,
+		arg.ChoiceID,
+	)
+	var chosen_at pgtype.Timestamptz
+	err := row.Scan(&chosen_at)
+	return chosen_at, err
+}
+
 const itemIsDone = `-- name: ItemIsDone :one
 SELECT EXISTS (SELECT 1 FROM item_completions WHERE learner_id = $1 AND item_id = $2) AS done
 `
