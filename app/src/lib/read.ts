@@ -340,6 +340,10 @@ export interface StoryItem {
   scene?: string;
   choices?: StoryChoice[];
   chosen?: StoryChosen | null;
+  /** Feedback only: the rubric, the mark it awards and the learner's reply work. */
+  rubric?: { id: string; text: string }[];
+  awards_mark?: { slug: string; title: string; held: boolean } | null;
+  work?: WritingWork | null;
 }
 
 export type ReviewState = 'pending' | 'done' | 'capped' | 'failed' | 'paused';
@@ -387,6 +391,9 @@ export interface WritingItem {
 }
 
 export type Item = QuizItem | StoryItem | WritingItem;
+
+/** An item the learner answers with written work: a writing task or a feedback round. */
+export type WorkItem = WritingItem | StoryItem;
 
 const escapeId = (id: string) => id.split('/').map(encodeURIComponent).join('/');
 
@@ -505,7 +512,7 @@ export interface Awarded {
 }
 
 export type SubmitOutcome =
-  | { ok: true; item: WritingItem; awarded: Awarded[] }
+  | { ok: true; item: WorkItem; awarded: Awarded[] }
   | { ok: false; reason: WriteFailure; retryAfterMs?: number };
 
 /** POST /v1/items/{id}/submit: 1 to 4,000 characters after trimming; answers the item view and the new inbox items. */
@@ -518,7 +525,7 @@ export async function submitWriting(id: string, body: string): Promise<SubmitOut
   }
   if (!res.ok) return writeFailure(res);
   try {
-    const data = (await res.json()) as { item?: WritingItem; awarded?: Awarded[] };
+    const data = (await res.json()) as { item?: WorkItem; awarded?: Awarded[] };
     return data.item ? { ok: true, item: data.item, awarded: data.awarded ?? [] } : { ok: false, reason: 'failed' };
   } catch {
     return { ok: false, reason: 'failed' };
