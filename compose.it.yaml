@@ -11,6 +11,9 @@ services:
       DOJO_COMMIT_VERIFY_INTERVAL_SECONDS: "1"
       # No flag cache, so a test that flips ai_reviews_enabled sees it at once (production caches 30 s).
       DOJO_FLAG_CACHE_SECONDS: "0"
+      # The review worker never ticks in the API: older tests expect a submit to stay pending, and the
+      # review tests run the worker in process against the same database.
+      DOJO_REVIEW_INTERVAL_SECONDS: "3600"
   fake-github:
     environment:
       # A short poll interval keeps the device-flow smoke test fast.

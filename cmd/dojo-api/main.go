@@ -104,6 +104,17 @@ func run(args []string) error {
 	}
 	go server.RunCommitVerifier(ctx, &server.CommitVerifier{Store: store, GitHub: gh, Batch: verifyBatch}, verifyEvery)
 
+	reviewEvery, reviewBatch, err := server.ParseReview(os.Getenv)
+	if err != nil {
+		return err
+	}
+	adapter, err := server.ParseAIAdapter(os.Getenv)
+	if err != nil {
+		return err
+	}
+	go server.RunReviewWorker(ctx, &server.ReviewWorker{Store: store, Adapter: adapter,
+		Enabled: server.NewReviewsEnabled(store.Queries(), flagTTL), Batch: reviewBatch}, reviewEvery)
+
 	auth := server.Auth{Store: store.Queries(), Catalog: store.Queries(),
 		Bundles: &server.Bundles{Store: store.Queries(), Signer: objects}, Secure: secure, Events: store,
 		Stream: hub, StreamHeartbeat: heartbeat,
