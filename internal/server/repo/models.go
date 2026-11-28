@@ -138,6 +138,24 @@ type HintOpen struct {
 	OpenedAt  pgtype.Timestamptz
 }
 
+type InboxItem struct {
+	ID         pgtype.UUID
+	OrgID      pgtype.UUID
+	LearnerID  pgtype.UUID
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+	Kind       string
+	Ref        string
+	Title      string
+	Body       string
+	Url        string
+	ReadAt     pgtype.Timestamptz
+	PushState  string
+	PushTries  int32
+	PushNextAt pgtype.Timestamptz
+	PushedAt   pgtype.Timestamptz
+}
+
 type ItemCompletion struct {
 	OrgID       pgtype.UUID
 	LearnerID   pgtype.UUID

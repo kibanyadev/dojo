@@ -183,7 +183,7 @@ func (rl *RateLimits) wrap(mux *http.ServeMux, next http.Handler) http.Handler {
 			writeKey = "learner:" + p.learner.String()
 		}
 		var readKey string
-		if p, authed := principalOf(r.Context()); authed && rl.Read != nil && (isLearnerRead(pattern) || pattern == "GET "+itemsPrefix || (pattern == "GET "+ticketsPrefix && isTicketRequest(r, routeTicket))) {
+		if p, authed := principalOf(r.Context()); authed && rl.Read != nil && (isLearnerRead(pattern) || pattern == "GET "+itemsPrefix || isInboxRead(pattern) || (pattern == "GET "+ticketsPrefix && isTicketRequest(r, routeTicket))) {
 			readKey = "learner:" + p.learner.String()
 		}
 		var bundleKey string
@@ -191,7 +191,7 @@ func (rl *RateLimits) wrap(mux *http.ServeMux, next http.Handler) http.Handler {
 			bundleKey = "learner:" + p.learner.String()
 		}
 		var betweenKey string
-		if p, authed := principalOf(r.Context()); authed && rl.Between != nil && pattern == "POST "+itemsPrefix && isItemWrite(r) {
+		if p, authed := principalOf(r.Context()); authed && rl.Between != nil && ((pattern == "POST "+itemsPrefix && isItemWrite(r)) || isInboxWrite(pattern)) {
 			betweenKey = "learner:" + p.learner.String()
 		}
 		isStart := pattern == "POST "+startPath && r.URL.Path == startPath
@@ -275,6 +275,15 @@ func (rl *RateLimits) wrap(mux *http.ServeMux, next http.Handler) http.Handler {
 func isItemWrite(r *http.Request) bool {
 	_, action, ok := parseItemPath(r.URL.Path)
 	return ok && action != ""
+}
+
+// isInboxRead and isInboxWrite report the inbox routes of the read and the between-tickets budgets.
+func isInboxRead(pattern string) bool {
+	return pattern == "GET /v1/inbox" || pattern == "GET /v1/inbox/{id}"
+}
+
+func isInboxWrite(pattern string) bool {
+	return pattern == "POST /v1/inbox/{id}/read" || pattern == "POST /v1/inbox/read-all"
 }
 
 // isLearnerRead reports the routed patterns that take the per-learner read budget.
