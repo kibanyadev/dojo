@@ -1,10 +1,28 @@
--- GET /v1/items/{id} (design 3.10): quiz and story items.
+-- GET /v1/items/{id} (design 3.10): quiz, story, writing and feedback items.
 
 -- name: GetItemView :one
-SELECT i.id, r.slug AS role, i.kind, i.title, i.est_minutes, i.tags, i.payload
+SELECT i.id, r.slug AS role, i.kind, i.title, i.est_minutes, i.tags, i.payload,
+       i.awards_mark AS awards_mark_slug, m.title AS awards_mark_title
 FROM catalog_items i
 JOIN roles r ON r.id = i.role_id
-WHERE i.id = $1 AND i.kind IN ('quiz', 'story');
+LEFT JOIN belt_marks m ON m.slug = i.awards_mark
+WHERE i.id = $1 AND i.kind IN ('quiz', 'story', 'writing', 'feedback');
+
+-- name: GetWrittenWork :one
+SELECT draft, draft_saved_at, body, submitted_at, submit_count, review_state, review, reviewed_at
+FROM written_work
+WHERE learner_id = $1 AND item_id = $2;
+
+-- PUT /v1/items/{id}/draft. The learner row is the source of org_id; no row back means the learner is gone.
+-- name: UpsertDraft :one
+INSERT INTO written_work (org_id, learner_id, item_id, draft, draft_saved_at)
+SELECT l.org_id, l.id, @item_id::text, @draft::text, now() FROM learners l WHERE l.id = @learner_id
+ON CONFLICT (learner_id, item_id) DO UPDATE
+SET draft = EXCLUDED.draft, draft_saved_at = now(), updated_at = now()
+RETURNING draft_saved_at;
+
+-- name: GetSystemFlag :one
+SELECT value FROM system_flags WHERE key = $1;
 
 -- name: ItemIsDone :one
 SELECT EXISTS (SELECT 1 FROM item_completions WHERE learner_id = $1 AND item_id = $2) AS done;
