@@ -103,20 +103,7 @@ type WorkSubmitter interface {
 // aiReviewsEnabled is the ai_reviews_enabled flag through the cache; a missing row reads as true.
 func (it *Items) aiReviewsEnabled(ctx context.Context) (bool, error) {
 	it.flagsOnce.Do(func() { it.flags.ttl = it.FlagTTL })
-	return it.flags.enabled(ctx, func(ctx context.Context) (bool, error) {
-		raw, err := it.Reader.GetSystemFlag(ctx, "ai_reviews_enabled")
-		if errors.Is(err, pgx.ErrNoRows) {
-			return true, nil
-		}
-		if err != nil {
-			return false, err
-		}
-		var enabled bool
-		if err := json.Unmarshal(raw, &enabled); err != nil {
-			return false, fmt.Errorf("ai_reviews_enabled: %w", err)
-		}
-		return enabled, nil
-	})
+	return it.flags.enabled(ctx, loadReviewsEnabled(it.Reader))
 }
 
 const maxAnswerBody = 1 << 10

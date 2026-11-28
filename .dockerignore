@@ -8,6 +8,7 @@
 !internal/mail
 !internal/storage
 !internal/mentor
+!internal/ai
 !cmd/dojo-admin
 !internal/admin
 !cmd/dojo-catalog-load

@@ -53,26 +53,28 @@ type CommitVerifier struct {
 
 // ParseCommitVerify reads DOJO_COMMIT_VERIFY_INTERVAL_SECONDS (default 60) and DOJO_COMMIT_VERIFY_BATCH (default 20).
 func ParseCommitVerify(get func(string) string) (time.Duration, int, error) {
-	n := func(name string, def, max int) (int, error) {
-		v := strings.TrimSpace(get(name))
-		if v == "" {
-			return def, nil
-		}
-		i, err := strconv.Atoi(v)
-		if err != nil || i < 1 || i > max {
-			return 0, fmt.Errorf("%s must be a whole number from 1 to %d, got %q", name, max, v)
-		}
-		return i, nil
-	}
-	secs, err := n("DOJO_COMMIT_VERIFY_INTERVAL_SECONDS", defaultVerifyInterval, 3600)
+	secs, err := envInt(get, "DOJO_COMMIT_VERIFY_INTERVAL_SECONDS", defaultVerifyInterval, 3600)
 	if err != nil {
 		return 0, 0, err
 	}
-	batch, err := n("DOJO_COMMIT_VERIFY_BATCH", defaultVerifyBatch, 200)
+	batch, err := envInt(get, "DOJO_COMMIT_VERIFY_BATCH", defaultVerifyBatch, 200)
 	if err != nil {
 		return 0, 0, err
 	}
 	return time.Duration(secs) * time.Second, batch, nil
+}
+
+// envInt reads a whole number from 1 to max, or def when the variable is empty.
+func envInt(get func(string) string, name string, def, max int) (int, error) {
+	v := strings.TrimSpace(get(name))
+	if v == "" {
+		return def, nil
+	}
+	i, err := strconv.Atoi(v)
+	if err != nil || i < 1 || i > max {
+		return 0, fmt.Errorf("%s must be a whole number from 1 to %d, got %q", name, max, v)
+	}
+	return i, nil
 }
 
 // RunCommitVerifier ticks until ctx ends; a failed tick is logged and the next one tries again.
