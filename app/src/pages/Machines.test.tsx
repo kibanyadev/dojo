@@ -123,6 +123,7 @@ describe('settings nav and route', () => {
     expect(links.map((a) => [a.textContent, a.getAttribute('href'), a.getAttribute('aria-current')])).toEqual([
       ['Account', '/settings', null],
       ['Machines', '/settings/machines', 'page'],
+      ['Your AI', '/settings/ai', null],
     ]);
   });
 

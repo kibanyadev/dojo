@@ -391,6 +391,57 @@ describe('Today without a ticket in progress', () => {
   });
 });
 
+describe('Today between item', () => {
+  const quiz = { id: 'support-l1/quiz-03', kind: 'quiz' as const, role: 'support-l1', title: 'Logs and permissions', est_minutes: 5 };
+  const story = { id: 'support-l1/story-01', kind: 'story' as const, role: 'support-l1', title: 'Elena has asked you twice today. How do you reply to the second ticket?', est_minutes: 1 };
+  const card = () => container.querySelector('section[aria-label="Between tickets"]');
+
+  it('shows a story as the dark card with its link', async () => {
+    stubApi({ current: perms, next: ssh, role, all_passed: false, between: story });
+    await mount();
+    expect(card()?.textContent).toContain('Story · your team');
+    expect(card()?.textContent).toContain(story.title);
+    expect(card()?.querySelector('a')?.getAttribute('href')).toBe('/story/support-l1/story-01');
+    expect(card()?.querySelector('a')?.textContent).toBe('Open the story');
+  });
+
+  it('labels a quiz and links to the quiz page', async () => {
+    stubApi({ current: null, next: ssh, role, all_passed: false, between: quiz });
+    await mount();
+    expect(card()?.textContent).toContain('Quiz · 5 min');
+    expect(card()?.querySelector('a')?.getAttribute('href')).toBe('/quiz/support-l1/quiz-03');
+  });
+
+  it('links writing to /w and feedback to the story page', async () => {
+    stubApi({ current: null, next: ssh, role, all_passed: false, between: { ...quiz, id: 'support-l1/write-01', kind: 'writing' } });
+    await mount();
+    expect(card()?.querySelector('a')?.getAttribute('href')).toBe('/w/support-l1/write-01');
+    expect(card()?.textContent).toContain('Writing · 5 min');
+    act(() => root.unmount());
+    root = createRoot(container);
+    stubApi({ current: null, next: ssh, role, all_passed: false, between: { ...quiz, id: 'support-l1/fb-01', kind: 'feedback' } });
+    await mount();
+    expect(card()?.querySelector('a')?.getAttribute('href')).toBe('/story/support-l1/fb-01');
+  });
+
+  it('is offered even when every ticket is passed', async () => {
+    stubApi({ current: null, next: null, role: { ...role, tickets_passed: 12 }, all_passed: true, between: quiz });
+    await mount();
+    expect(card()).not.toBeNull();
+  });
+
+  it('is hidden when between is null or missing', async () => {
+    stubApi({ current: perms, next: ssh, role, all_passed: false, between: null });
+    await mount();
+    expect(card()).toBeNull();
+    act(() => root.unmount());
+    root = createRoot(container);
+    stubApi({ current: perms, next: ssh, role, all_passed: false });
+    await mount();
+    expect(card()).toBeNull();
+  });
+});
+
 describe('copy command', () => {
   const copyBtn = () => container.querySelector<HTMLButtonElement>('button[aria-label="Copy command: dojo check"]')!;
   const notice = () => copyBtn().parentElement!.querySelector('[role=status]')!;

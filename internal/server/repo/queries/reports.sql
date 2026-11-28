@@ -1,8 +1,8 @@
 -- ticket_reports (design 3.9): the report form and its email reader.
 
--- A report is a ticket in the catalog.
+-- A report is about a ticket or a practice item.
 -- name: ReportItemExists :one
-SELECT EXISTS (SELECT 1 FROM catalog_items WHERE id = $1 AND kind = 'ticket')::boolean AS found;
+SELECT EXISTS (SELECT 1 FROM catalog_items WHERE id = $1 AND kind IN ('ticket', 'practice'))::boolean AS found;
 
 -- One report at a time per learner: the row lock serializes the count and the insert, so two requests cannot
 -- both pass the limit. dojo_api may lock a learner row because it can UPDATE some of its columns.

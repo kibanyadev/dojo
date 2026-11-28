@@ -66,6 +66,8 @@ type Auth struct {
 	Onboarding *Onboarding
 	// Reports backs POST /v1/reports; nil leaves the route out.
 	Reports ReportStore
+	// Items backs GET /v1/items/{id}; nil leaves the route out.
+	Items *Items
 }
 
 // ParseOrigin validates PUBLIC_ORIGIN for the environment (local, pre or pro) and reports

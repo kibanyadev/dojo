@@ -43,6 +43,8 @@ func seedDeletableLearner(t *testing.T, githubID, email, username string) string
 	asOwner(t, "INSERT INTO ticket_progress (org_id, learner_id, item_id, state, first_started_at) SELECT org_id, id, '"+delMarker+"/"+username+"', 'started', now() FROM learners WHERE id = '"+id+"'")
 	asOwner(t, "INSERT INTO hint_opens (org_id, learner_id, item_id, n) SELECT org_id, id, '"+delMarker+"/"+username+"', 1 FROM learners WHERE id = '"+id+"'")
 	asOwner(t, "INSERT INTO item_completions (org_id, learner_id, item_id) SELECT org_id, id, '"+delMarker+"/"+username+"' FROM learners WHERE id = '"+id+"'")
+	asOwner(t, "INSERT INTO quiz_answers (org_id, learner_id, item_id, question_id, first_choice, first_correct, last_choice, last_correct) SELECT org_id, id, '"+delMarker+"/"+username+"', 'q', 0, true, 0, true FROM learners WHERE id = '"+id+"'")
+	asOwner(t, "INSERT INTO story_choices (org_id, learner_id, item_id, choice_id) SELECT org_id, id, '"+delMarker+"/"+username+"', 'c' FROM learners WHERE id = '"+id+"'")
 	return id
 }
 
@@ -68,7 +70,7 @@ func TestDeleteLearnerRemovesOnlyThatLearner(t *testing.T) {
 	for _, table := range []struct{ name, col string }{
 		{"learners", "id"}, {"sessions", "learner_id"}, {"cli_tokens", "learner_id"}, {"telemetry_events", "learner_id"},
 		{"events", "learner_id"}, {"ticket_progress", "learner_id"}, {"hint_opens", "learner_id"},
-		{"item_completions", "learner_id"},
+		{"item_completions", "learner_id"}, {"quiz_answers", "learner_id"}, {"story_choices", "learner_id"},
 	} {
 		if got := countWhere(t, table.name, table.col+" = '"+victim+"'"); got != "0" {
 			t.Fatalf("%s rows left for the deleted learner: %s", table.name, got)

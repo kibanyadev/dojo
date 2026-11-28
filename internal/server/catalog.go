@@ -22,7 +22,9 @@ type CatalogStore interface {
 	ListCatalogPathRoles(ctx context.Context) ([]repo.ListCatalogPathRolesRow, error)
 	ListCatalogItems(ctx context.Context) ([]repo.ListCatalogItemsRow, error)
 	ListCatalogMarks(ctx context.Context) ([]repo.ListCatalogMarksRow, error)
+	ListPracticeItems(ctx context.Context) ([]repo.ListPracticeItemsRow, error)
 	ListLearnerTicketStates(ctx context.Context, learnerID pgtype.UUID) ([]repo.ListLearnerTicketStatesRow, error)
+	ListLearnerCompletedItems(ctx context.Context, learnerID pgtype.UUID) ([]string, error)
 	ListLearnerActivityDays(ctx context.Context, arg repo.ListLearnerActivityDaysParams) ([]repo.ListLearnerActivityDaysRow, error)
 	GetLearnerFirstRun(ctx context.Context, learnerID pgtype.UUID) (repo.GetLearnerFirstRunRow, error)
 	CountLearnerPasses(ctx context.Context, learnerID pgtype.UUID) (int32, error)
@@ -134,14 +136,15 @@ type pathItem struct {
 }
 
 type pathRole struct {
-	Slug          string     `json:"slug"`
-	Title         string     `json:"title"`
-	Summary       string     `json:"summary"`
-	Locked        bool       `json:"locked"`
-	Passed        bool       `json:"passed"`
-	TicketsPassed int        `json:"tickets_passed"`
-	TicketsTotal  int        `json:"tickets_total"`
-	Items         []pathItem `json:"items"`
+	Slug          string        `json:"slug"`
+	Title         string        `json:"title"`
+	Summary       string        `json:"summary"`
+	Locked        bool          `json:"locked"`
+	Passed        bool          `json:"passed"`
+	TicketsPassed int           `json:"tickets_passed"`
+	TicketsTotal  int           `json:"tickets_total"`
+	Items         []pathItem    `json:"items"`
+	BetweenItems  []betweenItem `json:"between_items"`
 }
 
 type pathResponse struct {
@@ -171,24 +174,25 @@ func (a Auth) loadPath(r *http.Request) (pathResponse, map[string]time.Time, err
 	prs, err3 := c.ListCatalogPathRoles(s)
 	items, err4 := c.ListCatalogItems(s)
 	prog, err5 := c.ListLearnerTicketStates(s, p.learner)
+	done, err7 := c.ListLearnerCompletedItems(s, p.learner)
 	chosen, err6 := c.GetLearnerChosenPathSlug(s, p.learner)
 	if errors.Is(err6, pgx.ErrNoRows) {
 		chosen, err6 = "", nil
 	}
-	if err := errors.Join(err1, err2, err3, err4, err5, err6); err != nil {
+	if err := errors.Join(err1, err2, err3, err4, err5, err6, err7); err != nil {
 		return pathResponse{}, nil, err
 	}
 	seen := make(map[string]time.Time, len(prog))
 	for _, x := range prog {
 		seen[x.ItemID] = x.LastSeenAt.Time
 	}
-	return buildPath(paths, roles, prs, items, prog, chosen), seen, nil
+	return buildPath(paths, roles, prs, items, prog, done, chosen), seen, nil
 }
 
 // buildPath is the learner's path with their ticket state, shared by GET /v1/path and /v1/today.
 // chosenSlug is the learner's available chosen path, empty when there is none.
 func buildPath(paths []repo.ListCatalogPathsRow, roles []repo.ListCatalogRolesRow, prs []repo.ListCatalogPathRolesRow,
-	items []repo.ListCatalogItemsRow, prog []repo.ListLearnerTicketStatesRow, chosenSlug string) pathResponse {
+	items []repo.ListCatalogItemsRow, prog []repo.ListLearnerTicketStatesRow, done []string, chosenSlug string) pathResponse {
 	out := pathResponse{Roles: []pathRole{}}
 	var chosen *repo.ListCatalogPathsRow
 	for i := range paths {
@@ -216,17 +220,33 @@ func buildPath(paths []repo.ListCatalogPathsRow, roles []repo.ListCatalogRolesRo
 		state[x.ItemID] = x
 	}
 	tickets := map[string][]repo.ListCatalogItemsRow{}
+	byRole := map[string][]repo.ListCatalogItemsRow{}
 	for _, i := range items {
+		byRole[i.Role] = append(byRole[i.Role], i)
 		if i.Kind == "ticket" {
 			tickets[i.Role] = append(tickets[i.Role], i)
 		}
+	}
+	isDone := make(map[string]bool, len(done))
+	for _, id := range done {
+		isDone[id] = true
+	}
+	passed := map[string]bool{}
+	for _, x := range prog {
+		passed[x.ItemID] = x.State == "passed" || x.State == "revisit"
 	}
 	for _, pr := range prs {
 		if pr.Path != chosen.Slug {
 			continue
 		}
 		role := roleBySlug[pr.Role]
-		pr := pathRole{Slug: role.Slug, Title: role.Title, Summary: role.Summary, Items: []pathItem{}}
+		pr := pathRole{Slug: role.Slug, Title: role.Title, Summary: role.Summary, Items: []pathItem{}, BetweenItems: []betweenItem{}}
+		unlocked := unlockedItems(byRole[role.Slug], passed)
+		for _, i := range byRole[role.Slug] {
+			if i.Kind != "ticket" {
+				pr.BetweenItems = append(pr.BetweenItems, betweenItem{i.ID, i.Kind, i.Title, i.Position, isDone[i.ID], unlocked[i.ID], i.EstMinutes})
+			}
+		}
 		for _, t := range tickets[role.Slug] {
 			it := pathItem{ID: t.ID, Title: t.Title, Order: t.Position}
 			if st, ok := state[t.ID]; ok {

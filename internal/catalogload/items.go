@@ -9,9 +9,9 @@ import (
 )
 
 // learnerTables are the tables that hold learner rows keyed by catalog_items.id through item_id.
-// A catalog item with a row in any of them cannot be dropped or change kind. Add quiz_answers,
-// story_choices and written_work here when their migrations land.
-var learnerTables = []string{"ticket_progress", "hint_opens", "item_completions"}
+// A catalog item with a row in any of them cannot be dropped or change kind. Add written_work here
+// when its migration lands.
+var learnerTables = []string{"ticket_progress", "hint_opens", "item_completions", "quiz_answers", "story_choices"}
 
 // itemRow is one catalog_items row; a nil pointer or slice is written as NULL.
 type itemRow struct {

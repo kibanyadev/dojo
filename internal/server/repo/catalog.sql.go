@@ -14,7 +14,7 @@ import (
 const countLearnerPasses = `-- name: CountLearnerPasses :one
 SELECT count(*)::int AS total
 FROM ticket_progress p
-JOIN catalog_items i ON i.id = p.item_id AND i.kind = 'ticket'
+JOIN catalog_items i ON i.id = p.item_id AND i.kind IN ('ticket', 'practice')
 WHERE p.learner_id = $1 AND p.first_passed_at IS NOT NULL
 `
 
@@ -262,7 +262,7 @@ func (q *Queries) ListCatalogRoles(ctx context.Context) ([]ListCatalogRolesRow, 
 const listLearnerActivityDays = `-- name: ListLearnerActivityDays :many
 SELECT (p.first_passed_at AT TIME ZONE $1::text)::date AS day, count(*)::int AS passes
 FROM ticket_progress p
-JOIN catalog_items i ON i.id = p.item_id AND i.kind = 'ticket'
+JOIN catalog_items i ON i.id = p.item_id AND i.kind IN ('ticket', 'practice')
 WHERE p.learner_id = $2 AND p.first_passed_at >= $3::timestamptz
 GROUP BY 1
 ORDER BY 1
@@ -300,10 +300,35 @@ func (q *Queries) ListLearnerActivityDays(ctx context.Context, arg ListLearnerAc
 	return items, nil
 }
 
+const listLearnerCompletedItems = `-- name: ListLearnerCompletedItems :many
+SELECT item_id FROM item_completions WHERE learner_id = $1
+`
+
+// Items the learner finished (design 3.10); done on Path and Today.
+func (q *Queries) ListLearnerCompletedItems(ctx context.Context, learnerID pgtype.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listLearnerCompletedItems, learnerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var item_id string
+		if err := rows.Scan(&item_id); err != nil {
+			return nil, err
+		}
+		items = append(items, item_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLearnerRecentPasses = `-- name: ListLearnerRecentPasses :many
 SELECT p.item_id, i.title, p.first_passed_at, p.passed_commit, p.commit_state
 FROM ticket_progress p
-JOIN catalog_items i ON i.id = p.item_id AND i.kind = 'ticket'
+JOIN catalog_items i ON i.id = p.item_id AND i.kind IN ('ticket', 'practice')
 WHERE p.learner_id = $1 AND p.first_passed_at IS NOT NULL
 ORDER BY p.first_passed_at DESC, p.item_id
 LIMIT 3
@@ -370,6 +395,48 @@ func (q *Queries) ListLearnerTicketStates(ctx context.Context, learnerID pgtype.
 			&i.LabState,
 			&i.LastSeenAt,
 			&i.CommitState,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPracticeItems = `-- name: ListPracticeItems :many
+SELECT id, title, est_minutes, tags, difficulty
+FROM catalog_items
+WHERE kind = 'practice'
+ORDER BY position
+`
+
+type ListPracticeItemsRow struct {
+	ID         string
+	Title      string
+	EstMinutes int32
+	Tags       []string
+	Difficulty pgtype.Text
+}
+
+// GET /v1/practice (design 3.10): the practice items, by position.
+func (q *Queries) ListPracticeItems(ctx context.Context) ([]ListPracticeItemsRow, error) {
+	rows, err := q.db.Query(ctx, listPracticeItems)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPracticeItemsRow
+	for rows.Next() {
+		var i ListPracticeItemsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.EstMinutes,
+			&i.Tags,
+			&i.Difficulty,
 		); err != nil {
 			return nil, err
 		}

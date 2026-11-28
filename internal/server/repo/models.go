@@ -226,6 +226,21 @@ type PendingCommit struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type QuizAnswer struct {
+	OrgID        pgtype.UUID
+	LearnerID    pgtype.UUID
+	ItemID       string
+	QuestionID   string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	FirstChoice  int16
+	FirstCorrect bool
+	FirstAt      pgtype.Timestamptz
+	LastChoice   int16
+	LastCorrect  bool
+	LastAt       pgtype.Timestamptz
+}
+
 type Role struct {
 	ID        pgtype.UUID
 	OrgID     pgtype.UUID
@@ -248,6 +263,16 @@ type Session struct {
 	UpdatedAt  pgtype.Timestamptz
 	LastUsedAt pgtype.Timestamptz
 	RevokedAt  pgtype.Timestamptz
+}
+
+type StoryChoice struct {
+	OrgID     pgtype.UUID
+	LearnerID pgtype.UUID
+	ItemID    string
+	ChoiceID  string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+	ChosenAt  pgtype.Timestamptz
 }
 
 type TelemetryEvent struct {

@@ -22,7 +22,9 @@ type fakeCatalog struct {
 	pathRole []repo.ListCatalogPathRolesRow
 	items    []repo.ListCatalogItemsRow
 	marks    []repo.ListCatalogMarksRow
+	practice []repo.ListPracticeItemsRow
 	progress []repo.ListLearnerTicketStatesRow
+	done     []string
 	days     []repo.ListLearnerActivityDaysRow
 	total    int32
 	recent   []repo.ListLearnerRecentPassesRow
@@ -62,12 +64,20 @@ func (f *fakeCatalog) ListCatalogItems(context.Context) ([]repo.ListCatalogItems
 	return f.items, f.err
 }
 
+func (f *fakeCatalog) ListPracticeItems(context.Context) ([]repo.ListPracticeItemsRow, error) {
+	return f.practice, f.err
+}
+
 func (f *fakeCatalog) ListCatalogMarks(context.Context) ([]repo.ListCatalogMarksRow, error) {
 	return f.marks, f.err
 }
 
 func (f *fakeCatalog) ListLearnerTicketStates(context.Context, pgtype.UUID) ([]repo.ListLearnerTicketStatesRow, error) {
 	return f.progress, f.err
+}
+
+func (f *fakeCatalog) ListLearnerCompletedItems(context.Context, pgtype.UUID) ([]string, error) {
+	return f.done, f.err
 }
 
 func (f *fakeCatalog) GetLearnerFirstRun(context.Context, pgtype.UUID) (repo.GetLearnerFirstRunRow, error) {

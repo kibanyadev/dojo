@@ -399,6 +399,31 @@ var grantCases = []struct {
 	{"dojo_admin", "INSERT INTO item_completions (org_id, learner_id, item_id) SELECT org_id, id, 'a/b' FROM learners WHERE false", false},
 	{"dojo_admin", "UPDATE item_completions SET updated_at = now() WHERE false", false},
 	{"dojo_admin", "DELETE FROM item_completions WHERE false", false},
+
+	// quiz_answers and story_choices (migration 00026): the first answer never changes, a story choice is final,
+	// dojo_admin has no grant.
+	{"dojo_api", "SELECT learner_id, item_id, question_id, first_choice, first_correct, first_at, last_choice, last_correct, last_at FROM quiz_answers", true},
+	{"dojo_api", "INSERT INTO quiz_answers (org_id, learner_id, item_id, question_id, first_choice, first_correct, first_at, last_choice, last_correct, last_at) SELECT org_id, id, 'a/b', 'q', 0, true, now(), 0, true, now() FROM learners WHERE false", true},
+	{"dojo_api", "INSERT INTO quiz_answers (org_id, learner_id, item_id, question_id, first_choice, first_correct, last_choice, last_correct, created_at) SELECT org_id, id, 'a/b', 'q', 0, true, 0, true, now() FROM learners WHERE false", false},
+	{"dojo_api", "UPDATE quiz_answers SET updated_at = now(), last_choice = 1, last_correct = false, last_at = now() WHERE false", true},
+	{"dojo_api", "UPDATE quiz_answers SET first_choice = 1 WHERE false", false},
+	{"dojo_api", "UPDATE quiz_answers SET first_correct = true WHERE false", false},
+	{"dojo_api", "UPDATE quiz_answers SET first_at = now() WHERE false", false},
+	{"dojo_api", "UPDATE quiz_answers SET question_id = 'x' WHERE false", false},
+	{"dojo_api", "UPDATE quiz_answers SET item_id = 'x' WHERE false", false},
+	{"dojo_api", "DELETE FROM quiz_answers WHERE false", false},
+	{"dojo_api", "TRUNCATE quiz_answers", false},
+	{"dojo_api", "SELECT learner_id, item_id, choice_id, chosen_at FROM story_choices", true},
+	{"dojo_api", "INSERT INTO story_choices (org_id, learner_id, item_id, choice_id) SELECT org_id, id, 'a/b', 'c' FROM learners WHERE false", true},
+	{"dojo_api", "INSERT INTO story_choices (org_id, learner_id, item_id, choice_id, chosen_at) SELECT org_id, id, 'a/b', 'c', now() FROM learners WHERE false", false},
+	{"dojo_api", "UPDATE story_choices SET choice_id = 'x' WHERE false", false},
+	{"dojo_api", "UPDATE story_choices SET updated_at = now() WHERE false", false},
+	{"dojo_api", "DELETE FROM story_choices WHERE false", false},
+	{"dojo_api", "TRUNCATE story_choices", false},
+	{"dojo_admin", "SELECT count(*) FROM quiz_answers", false},
+	{"dojo_admin", "SELECT count(*) FROM story_choices", false},
+	{"dojo_admin", "INSERT INTO quiz_answers (org_id) SELECT id FROM orgs WHERE false", false},
+	{"dojo_admin", "DELETE FROM story_choices WHERE false", false},
 }
 
 // Connects by the container address: the image trusts loopback, other addresses use scram.

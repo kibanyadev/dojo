@@ -28,6 +28,7 @@ type todayResponse struct {
 	Role      *todayRole     `json:"role"`
 	AllPassed bool           `json:"all_passed"`
 	FirstRun  *todayFirstRun `json:"first_run"`
+	Between   *todayBetween  `json:"between"`
 }
 
 // todayFirstRun is the learner's earliest first pass while they have not left "day one done" (design 3.9).
@@ -47,6 +48,7 @@ func (a Auth) today(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := selectToday(p.Roles, seen)
+	out.Between = selectBetween(p.Roles)
 	fr, err := a.Catalog.GetLearnerFirstRun(r.Context(), principalLearner(r))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):

@@ -26,6 +26,8 @@ func progressItem(t *testing.T, id string) {
 	clean := func() {
 		asOwner(t, "DELETE FROM item_completions WHERE item_id = '"+id+"'")
 		asOwner(t, "DELETE FROM hint_opens WHERE item_id = '"+id+"'")
+		asOwner(t, "DELETE FROM quiz_answers WHERE item_id = '"+id+"'")
+		asOwner(t, "DELETE FROM story_choices WHERE item_id = '"+id+"'")
 		asOwner(t, "DELETE FROM ticket_progress WHERE item_id = '"+id+"'")
 		asOwner(t, "DELETE FROM catalog_items WHERE id = '"+id+"'")
 	}

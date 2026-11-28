@@ -17,7 +17,7 @@ function SectionLink({ to, end, children }: { to: string; end?: boolean; childre
   );
 }
 
-/** The Settings frame: title, section nav (Account, Machines), and the cards of the current section. */
+/** The Settings frame: title, section nav (Account, Machines, Your AI), and the cards of the current section. */
 export function SettingsLayout({ me, children }: { me: Me; children: ReactNode }) {
   return (
     <AppFrame me={me}>
@@ -34,6 +34,7 @@ export function SettingsLayout({ me, children }: { me: Me; children: ReactNode }
               Account
             </SectionLink>
             <SectionLink to="/settings/machines">Machines</SectionLink>
+            <SectionLink to="/settings/ai">Your AI</SectionLink>
           </nav>
           <div className="flex min-w-0 flex-col gap-4">{children}</div>
         </div>

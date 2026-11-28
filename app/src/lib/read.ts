@@ -57,6 +57,26 @@ export interface PathItem {
   lab_state: LabState | null;
 }
 
+export type BetweenKind = 'writing' | 'quiz' | 'story' | 'feedback';
+
+/** A non-ticket item of a role in GET /v1/path (design 3.10). */
+export interface BetweenItem {
+  id: string;
+  kind: BetweenKind;
+  title: string;
+  order: number;
+  done: boolean;
+}
+
+/** The item GET /v1/today offers between tickets (design 3.10). */
+export interface TodayBetween {
+  id: string;
+  kind: BetweenKind;
+  role: string;
+  title: string;
+  est_minutes: number;
+}
+
 export interface PathRole {
   slug: string;
   title: string;
@@ -66,6 +86,7 @@ export interface PathRole {
   tickets_passed: number;
   tickets_total: number;
   items: PathItem[];
+  between_items?: BetweenItem[];
 }
 
 export interface LearnerPath {
@@ -95,6 +116,7 @@ export interface Today {
   next: TodayTicket | null;
   role: { slug: string; title: string; tickets_passed: number; tickets_total: number } | null;
   all_passed: boolean;
+  between?: TodayBetween | null;
 }
 
 export interface TicketProgress {
@@ -125,6 +147,21 @@ export interface Ticket {
   hint_count: number;
   hints: { n: number; text: string }[];
   progress: TicketProgress | null;
+}
+
+export type Difficulty = 'easy' | 'medium' | 'hard';
+
+/** One row of GET /v1/practice: practice scenarios first, then tickets of unlocked roles as revisits. */
+export interface PracticeItem {
+  id: string;
+  kind: 'practice' | 'ticket';
+  role: string | null;
+  title: string;
+  est_minutes: number;
+  tags: string[];
+  difficulty: Difficulty | null;
+  state: TicketState | null;
+  lab_state: LabState | null;
 }
 
 export interface ActivityDay {
@@ -220,6 +257,7 @@ async function getJSON<T>(path: string): Promise<T> {
 export const fetchCatalog = () => getJSON<Catalog>('/v1/catalog');
 export const fetchPath = () => getJSON<LearnerPath>('/v1/path');
 export const fetchToday = () => getJSON<Today>('/v1/today');
+export const fetchPractice = () => getJSON<{ items: PracticeItem[] }>('/v1/practice');
 
 /** The browser's IANA zone, or null when it cannot say (the read then omits tz and the server uses UTC). */
 export function browserZone(): string | null {
@@ -280,6 +318,7 @@ export const CATALOG_KEY = ['catalog'] as const;
 export const PATH_KEY = ['path'] as const;
 export const TODAY_KEY = ['today'] as const;
 export const ACTIVITY_KEY = ['activity'] as const;
+export const PRACTICE_KEY = ['practice'] as const;
 export const ticketKey = (id: string) => ['ticket', id] as const;
 export const TICKET_KEY_PREFIX = ['ticket'] as const;
 
@@ -289,6 +328,7 @@ const retry = (count: number, err: Error) => !(err instanceof ReadError && err.r
 export const useCatalog = () => useQuery({ queryKey: CATALOG_KEY, queryFn: fetchCatalog, retry, staleTime: 5 * 60_000 });
 export const usePath = () => useQuery({ queryKey: PATH_KEY, queryFn: fetchPath, retry, staleTime: Infinity });
 export const useToday = () => useQuery({ queryKey: TODAY_KEY, queryFn: fetchToday, retry, staleTime: Infinity });
+export const usePractice = () => useQuery({ queryKey: PRACTICE_KEY, queryFn: fetchPractice, retry, staleTime: Infinity });
 export const useTicket = (id: string) =>
   useQuery({ queryKey: ticketKey(id), queryFn: () => fetchTicket(id), retry, staleTime: Infinity });
 export const useActivity = () => useQuery({ queryKey: ACTIVITY_KEY, queryFn: fetchActivity, retry, staleTime: Infinity });

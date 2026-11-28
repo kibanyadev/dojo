@@ -9,7 +9,9 @@ import { First } from './pages/First';
 import { Today } from './pages/Today';
 import { Settings } from './pages/Settings';
 import { Machines } from './pages/Machines';
+import { YourAI } from './pages/YourAI';
 import { PathPage } from './pages/Path';
+import { PracticePage } from './pages/Practice';
 import { SignInPage } from './pages/SignIn';
 import { TicketPage } from './pages/Ticket';
 
@@ -104,6 +106,15 @@ export function MachinesRoute() {
   return <Machines me={me.data} />;
 }
 
+// /app/settings/ai: same guard as /app.
+export function YourAIRoute() {
+  const me = useMe();
+  if (me.isPending) return <Loading />;
+  if (me.isError) return <MeFailed error={me.error} retry={() => void me.refetch()} />;
+  if (me.data === null) return <Navigate to="/signin" replace />;
+  return <YourAI me={me.data} />;
+}
+
 // /app/path: same guard as /app.
 export function PathRoute() {
   const me = useMe();
@@ -111,6 +122,15 @@ export function PathRoute() {
   if (me.isError) return <MeFailed error={me.error} retry={() => void me.refetch()} />;
   if (me.data === null) return <Navigate to="/signin" replace />;
   return <PathPage me={me.data} />;
+}
+
+// /app/practice: same guard as /app.
+export function PracticeRoute() {
+  const me = useMe();
+  if (me.isPending) return <Loading />;
+  if (me.isError) return <MeFailed error={me.error} retry={() => void me.refetch()} />;
+  if (me.data === null) return <Navigate to="/signin" replace />;
+  return <PracticePage me={me.data} />;
 }
 
 // /app/t/<role>/<ticket>: same guard as /app.

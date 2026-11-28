@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router';
 
-// Practice (R6) and the inbox (N1) have no page in M2; add them here when they land.
+// The inbox (N1) has no page yet; add it here when it lands.
 const ITEMS = [
   { to: '/today', label: 'Today' },
   { to: '/path', label: 'Path' },
+  { to: '/practice', label: 'Practice' },
 ] as const;
 
 /** Top-bar links on desktop. */

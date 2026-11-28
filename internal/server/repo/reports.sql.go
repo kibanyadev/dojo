@@ -149,11 +149,11 @@ func (q *Queries) MarkReportEmailed(ctx context.Context, id pgtype.UUID) error {
 
 const reportItemExists = `-- name: ReportItemExists :one
 
-SELECT EXISTS (SELECT 1 FROM catalog_items WHERE id = $1 AND kind = 'ticket')::boolean AS found
+SELECT EXISTS (SELECT 1 FROM catalog_items WHERE id = $1 AND kind IN ('ticket', 'practice'))::boolean AS found
 `
 
 // ticket_reports (design 3.9): the report form and its email reader.
-// A report is a ticket in the catalog.
+// A report is about a ticket or a practice item.
 func (q *Queries) ReportItemExists(ctx context.Context, id string) (bool, error) {
 	row := q.db.QueryRow(ctx, reportItemExists, id)
 	var found bool

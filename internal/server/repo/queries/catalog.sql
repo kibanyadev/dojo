@@ -21,6 +21,13 @@ FROM catalog_items i
 JOIN roles r ON r.id = i.role_id
 ORDER BY r.slug, i.position;
 
+-- GET /v1/practice (design 3.10): the practice items, by position.
+-- name: ListPracticeItems :many
+SELECT id, title, est_minutes, tags, difficulty
+FROM catalog_items
+WHERE kind = 'practice'
+ORDER BY position;
+
 -- Marks in belt order (design 3.10), then their place in the belt.
 -- name: ListCatalogMarks :many
 SELECT slug, belt, title, summary, position
@@ -38,7 +45,7 @@ SELECT item_id, state, lab_state, last_seen_at, commit_state FROM ticket_progres
 -- name: ListLearnerActivityDays :many
 SELECT (p.first_passed_at AT TIME ZONE @tz::text)::date AS day, count(*)::int AS passes
 FROM ticket_progress p
-JOIN catalog_items i ON i.id = p.item_id AND i.kind = 'ticket'
+JOIN catalog_items i ON i.id = p.item_id AND i.kind IN ('ticket', 'practice')
 WHERE p.learner_id = @learner_id AND p.first_passed_at >= @since::timestamptz
 GROUP BY 1
 ORDER BY 1;
@@ -46,13 +53,17 @@ ORDER BY 1;
 -- name: CountLearnerPasses :one
 SELECT count(*)::int AS total
 FROM ticket_progress p
-JOIN catalog_items i ON i.id = p.item_id AND i.kind = 'ticket'
+JOIN catalog_items i ON i.id = p.item_id AND i.kind IN ('ticket', 'practice')
 WHERE p.learner_id = $1 AND p.first_passed_at IS NOT NULL;
 
 -- name: ListLearnerRecentPasses :many
 SELECT p.item_id, i.title, p.first_passed_at, p.passed_commit, p.commit_state
 FROM ticket_progress p
-JOIN catalog_items i ON i.id = p.item_id AND i.kind = 'ticket'
+JOIN catalog_items i ON i.id = p.item_id AND i.kind IN ('ticket', 'practice')
 WHERE p.learner_id = $1 AND p.first_passed_at IS NOT NULL
 ORDER BY p.first_passed_at DESC, p.item_id
 LIMIT 3;
+
+-- Items the learner finished (design 3.10); done on Path and Today.
+-- name: ListLearnerCompletedItems :many
+SELECT item_id FROM item_completions WHERE learner_id = $1;

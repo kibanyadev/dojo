@@ -179,6 +179,30 @@ func TestKindChangeRefusedWithLearnerRows(t *testing.T) {
 	}
 }
 
+func TestKindChangeRefusedWithAnswerRows(t *testing.T) {
+	for name, insert := range map[string]string{
+		"quiz_answers": "INSERT INTO quiz_answers (org_id, learner_id, item_id, question_id, first_choice, first_correct, last_choice, last_correct) " +
+			"SELECT org_id, id, 'support-l1/quiz-01', 'q1', 0, true, 0, true FROM learners WHERE github_id = 9101",
+		"story_choices": "INSERT INTO story_choices (org_id, learner_id, item_id, choice_id) " +
+			"SELECT org_id, id, 'support-l1/quiz-01', 'c1' FROM learners WHERE github_id = 9101",
+	} {
+		t.Run(name, func(t *testing.T) {
+			wipe(t)
+			dir := richFixture(t)
+			mustLoad(t, dir, v1, "4 tickets")
+			psql(t, seedLearner+"; "+insert)
+			if err := os.Remove(filepath.Join(dir, "support-l1", "quiz-01", "quiz.yaml")); err != nil {
+				t.Fatal(err)
+			}
+			put(t, dir, "support-l1/quiz-01/story.yaml", storyYAML)
+			out, err := load(t, dir, v2)
+			if err == nil || !strings.Contains(out, "would change kind: support-l1/quiz-01") {
+				t.Fatalf("want a refusal naming the item, got %v\n%s", err, out)
+			}
+		})
+	}
+}
+
 func TestDropRefusedForCompletionOfAnyKind(t *testing.T) {
 	wipe(t)
 	dir := richFixture(t)

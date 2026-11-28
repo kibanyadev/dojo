@@ -37,6 +37,7 @@ func New(ready Readiness, auth Auth, limits *RateLimits, signin *SignIn, cli *CL
 		mux.HandleFunc("GET /v1/path", requireSession(auth.path))
 		mux.HandleFunc("GET /v1/today", requireSession(auth.today))
 		mux.HandleFunc("GET /v1/activity", requireSession(auth.activity))
+		mux.HandleFunc("GET /v1/practice", requireSession(auth.practice))
 		if auth.Onboarding != nil {
 			mux.HandleFunc("GET "+onboardingPath, requireSession(auth.onboarding))
 			if auth.Onboarding.Confirmer != nil {
@@ -54,6 +55,10 @@ func New(ready Readiness, auth Auth, limits *RateLimits, signin *SignIn, cli *CL
 	}
 	if auth.Tickets != nil {
 		mux.HandleFunc("POST "+ticketsPrefix, requireSession(auth.postTicketRoute))
+	}
+	if auth.Items != nil {
+		mux.HandleFunc("GET "+itemsPrefix, requireSession(auth.getItemRoute))
+		mux.HandleFunc("POST "+itemsPrefix, requireSession(auth.postItemRoute))
 	}
 	if auth.Reports != nil {
 		mux.HandleFunc("POST "+reportsPath, requireSession(auth.postReport))

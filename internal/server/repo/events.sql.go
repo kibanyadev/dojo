@@ -320,7 +320,7 @@ func (q *Queries) ListStaleLabs(ctx context.Context, arg ListStaleLabsParams) ([
 }
 
 const listTicketIDs = `-- name: ListTicketIDs :many
-SELECT id FROM catalog_items WHERE org_id = $1 AND kind = 'ticket' AND id = ANY($2::text[])
+SELECT id FROM catalog_items WHERE org_id = $1 AND kind IN ('ticket', 'practice') AND id = ANY($2::text[])
 `
 
 type ListTicketIDsParams struct {

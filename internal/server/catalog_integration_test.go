@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-const wipeCatalog = "DELETE FROM hint_opens; DELETE FROM item_completions; DELETE FROM ticket_progress; DELETE FROM catalog_items; DELETE FROM belt_marks; " +
+const wipeCatalog = "DELETE FROM hint_opens; DELETE FROM item_completions; DELETE FROM quiz_answers; DELETE FROM story_choices; DELETE FROM ticket_progress; DELETE FROM catalog_items; DELETE FROM belt_marks; " +
 	"DELETE FROM path_roles; DELETE FROM roles; DELETE FROM paths; DELETE FROM catalog_state"
 
 // freshCatalog empties the catalog tables before and after the test (the stack is not shared with a load job here).

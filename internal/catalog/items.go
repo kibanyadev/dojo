@@ -220,6 +220,11 @@ func checkText(is *issues, field, s string, max int) {
 	}
 }
 
+// ValidLocalID reports whether id is a question, rubric or choice id: a slug of at most 32 characters.
+func ValidLocalID(id string) bool {
+	return len(id) <= maxLocalIDLen && slugRE.MatchString(id)
+}
+
 // checkLocalID checks an id that is a slug of at most 32 characters, distinct within seen.
 func checkLocalID(is *issues, field, id string, seen map[string]bool) {
 	switch {

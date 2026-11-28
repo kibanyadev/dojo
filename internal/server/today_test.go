@@ -91,7 +91,7 @@ func TestTodayTicketFields(t *testing.T) {
 
 func TestTodayNoPathAndNoTickets(t *testing.T) {
 	rec := getCatalogRoute(t, &fakeCatalog{}, "/v1/today", false, false)
-	if want := `{"current":null,"next":null,"role":null,"all_passed":false,"first_run":null}` + "\n"; rec.Body.String() != want {
+	if want := `{"current":null,"next":null,"role":null,"all_passed":false,"first_run":null,"between":null}` + "\n"; rec.Body.String() != want {
 		t.Fatalf("empty: %q", rec.Body)
 	}
 	f := populatedCatalog()

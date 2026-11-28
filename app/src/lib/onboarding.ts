@@ -19,6 +19,8 @@ export interface DoctorCheck {
   fix: string;
   /** `cli` for a `dojo doctor` result, `learner` for a step the learner confirmed on the page. */
   source?: string;
+  /** When the check last ran (RFC 3339). */
+  checked_at?: string;
 }
 
 export interface Onboarding {

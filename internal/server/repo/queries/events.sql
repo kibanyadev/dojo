@@ -16,7 +16,7 @@ ON CONFLICT (learner_id, client_event_id) DO NOTHING
 RETURNING id;
 
 -- name: ListTicketIDs :many
-SELECT id FROM catalog_items WHERE org_id = @org_id AND kind = 'ticket' AND id = ANY(@ids::text[]);
+SELECT id FROM catalog_items WHERE org_id = @org_id AND kind IN ('ticket', 'practice') AND id = ANY(@ids::text[]);
 
 -- name: GetTicketProgress :one
 SELECT * FROM ticket_progress WHERE learner_id = $1 AND item_id = $2;

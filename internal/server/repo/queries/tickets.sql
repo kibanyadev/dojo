@@ -4,7 +4,7 @@
 SELECT i.id, r.slug AS role, i.title, i.est_minutes, i.tags, i.brief, i.hints
 FROM catalog_items i
 LEFT JOIN roles r ON r.id = i.role_id
-WHERE i.id = $1 AND i.kind = 'ticket';
+WHERE i.id = $1 AND i.kind IN ('ticket', 'practice');
 
 -- name: ListHintOpens :many
 SELECT n FROM hint_opens WHERE learner_id = $1 AND item_id = $2 ORDER BY n;
