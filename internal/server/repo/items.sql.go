@@ -13,23 +13,27 @@ import (
 
 const getItemView = `-- name: GetItemView :one
 
-SELECT i.id, r.slug AS role, i.kind, i.title, i.est_minutes, i.tags, i.payload
+SELECT i.id, r.slug AS role, i.kind, i.title, i.est_minutes, i.tags, i.payload,
+       i.awards_mark AS awards_mark_slug, m.title AS awards_mark_title
 FROM catalog_items i
 JOIN roles r ON r.id = i.role_id
-WHERE i.id = $1 AND i.kind IN ('quiz', 'story')
+LEFT JOIN belt_marks m ON m.slug = i.awards_mark
+WHERE i.id = $1 AND i.kind IN ('quiz', 'story', 'writing', 'feedback')
 `
 
 type GetItemViewRow struct {
-	ID         string
-	Role       string
-	Kind       string
-	Title      string
-	EstMinutes int32
-	Tags       []string
-	Payload    []byte
+	ID              string
+	Role            string
+	Kind            string
+	Title           string
+	EstMinutes      int32
+	Tags            []string
+	Payload         []byte
+	AwardsMarkSlug  pgtype.Text
+	AwardsMarkTitle pgtype.Text
 }
 
-// GET /v1/items/{id} (design 3.10): quiz and story items.
+// GET /v1/items/{id} (design 3.10): quiz, story, writing and feedback items.
 func (q *Queries) GetItemView(ctx context.Context, id string) (GetItemViewRow, error) {
 	row := q.db.QueryRow(ctx, getItemView, id)
 	var i GetItemViewRow
@@ -41,6 +45,8 @@ func (q *Queries) GetItemView(ctx context.Context, id string) (GetItemViewRow, e
 		&i.EstMinutes,
 		&i.Tags,
 		&i.Payload,
+		&i.AwardsMarkSlug,
+		&i.AwardsMarkTitle,
 	)
 	return i, err
 }
@@ -66,6 +72,55 @@ func (q *Queries) GetStoryChoice(ctx context.Context, arg GetStoryChoiceParams) 
 	return i, err
 }
 
+const getSystemFlag = `-- name: GetSystemFlag :one
+SELECT value FROM system_flags WHERE key = $1
+`
+
+func (q *Queries) GetSystemFlag(ctx context.Context, key string) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getSystemFlag, key)
+	var value []byte
+	err := row.Scan(&value)
+	return value, err
+}
+
+const getWrittenWork = `-- name: GetWrittenWork :one
+SELECT draft, draft_saved_at, body, submitted_at, submit_count, review_state, review, reviewed_at
+FROM written_work
+WHERE learner_id = $1 AND item_id = $2
+`
+
+type GetWrittenWorkParams struct {
+	LearnerID pgtype.UUID
+	ItemID    string
+}
+
+type GetWrittenWorkRow struct {
+	Draft        string
+	DraftSavedAt pgtype.Timestamptz
+	Body         pgtype.Text
+	SubmittedAt  pgtype.Timestamptz
+	SubmitCount  int32
+	ReviewState  pgtype.Text
+	Review       []byte
+	ReviewedAt   pgtype.Timestamptz
+}
+
+func (q *Queries) GetWrittenWork(ctx context.Context, arg GetWrittenWorkParams) (GetWrittenWorkRow, error) {
+	row := q.db.QueryRow(ctx, getWrittenWork, arg.LearnerID, arg.ItemID)
+	var i GetWrittenWorkRow
+	err := row.Scan(
+		&i.Draft,
+		&i.DraftSavedAt,
+		&i.Body,
+		&i.SubmittedAt,
+		&i.SubmitCount,
+		&i.ReviewState,
+		&i.Review,
+		&i.ReviewedAt,
+	)
+	return i, err
+}
+
 const insertItemCompletion = `-- name: InsertItemCompletion :one
 INSERT INTO item_completions (org_id, learner_id, item_id)
 VALUES ($1, $2, $3)
@@ -85,6 +140,32 @@ func (q *Queries) InsertItemCompletion(ctx context.Context, arg InsertItemComple
 	var item_id string
 	err := row.Scan(&item_id)
 	return item_id, err
+}
+
+const insertStoryChoice = `-- name: InsertStoryChoice :one
+INSERT INTO story_choices (org_id, learner_id, item_id, choice_id)
+VALUES ($1, $2, $3, $4)
+RETURNING chosen_at
+`
+
+type InsertStoryChoiceParams struct {
+	OrgID     pgtype.UUID
+	LearnerID pgtype.UUID
+	ItemID    string
+	ChoiceID  string
+}
+
+// POST /v1/items/{id}/choice: the choice is final (no UPDATE grant). Run under the learner's class-1 lock.
+func (q *Queries) InsertStoryChoice(ctx context.Context, arg InsertStoryChoiceParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, insertStoryChoice,
+		arg.OrgID,
+		arg.LearnerID,
+		arg.ItemID,
+		arg.ChoiceID,
+	)
+	var chosen_at pgtype.Timestamptz
+	err := row.Scan(&chosen_at)
+	return chosen_at, err
 }
 
 const itemIsDone = `-- name: ItemIsDone :one
@@ -146,6 +227,28 @@ func (q *Queries) ListQuizAnswers(ctx context.Context, arg ListQuizAnswersParams
 		return nil, err
 	}
 	return items, nil
+}
+
+const upsertDraft = `-- name: UpsertDraft :one
+INSERT INTO written_work (org_id, learner_id, item_id, draft, draft_saved_at)
+SELECT l.org_id, l.id, $1::text, $2::text, now() FROM learners l WHERE l.id = $3
+ON CONFLICT (learner_id, item_id) DO UPDATE
+SET draft = EXCLUDED.draft, draft_saved_at = now(), updated_at = now()
+RETURNING draft_saved_at
+`
+
+type UpsertDraftParams struct {
+	ItemID    string
+	Draft     string
+	LearnerID pgtype.UUID
+}
+
+// PUT /v1/items/{id}/draft. The learner row is the source of org_id; no row back means the learner is gone.
+func (q *Queries) UpsertDraft(ctx context.Context, arg UpsertDraftParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, upsertDraft, arg.ItemID, arg.Draft, arg.LearnerID)
+	var draft_saved_at pgtype.Timestamptz
+	err := row.Scan(&draft_saved_at)
+	return draft_saved_at, err
 }
 
 const upsertQuizAnswer = `-- name: UpsertQuizAnswer :exec

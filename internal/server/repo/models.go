@@ -30,6 +30,20 @@ type AdminSession struct {
 	RevokedAt  pgtype.Timestamptz
 }
 
+type AiReview struct {
+	ID          pgtype.UUID
+	OrgID       pgtype.UUID
+	LearnerID   pgtype.UUID
+	ItemID      string
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	SubmitCount int32
+	Model       string
+	TokensIn    int32
+	TokensOut   int32
+	Outcome     string
+}
+
 type BeltMark struct {
 	ID        pgtype.UUID
 	OrgID     pgtype.UUID
@@ -293,6 +307,12 @@ type StoryChoice struct {
 	ChosenAt  pgtype.Timestamptz
 }
 
+type SystemFlag struct {
+	Key       string
+	Value     []byte
+	UpdatedAt pgtype.Timestamptz
+}
+
 type TelemetryEvent struct {
 	ID         pgtype.UUID
 	OrgID      pgtype.UUID
@@ -346,4 +366,23 @@ type TicketReport struct {
 	EmailedAt       pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+}
+
+type WrittenWork struct {
+	OrgID            pgtype.UUID
+	LearnerID        pgtype.UUID
+	ItemID           string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	Draft            string
+	DraftSavedAt     pgtype.Timestamptz
+	Body             pgtype.Text
+	FirstSubmittedAt pgtype.Timestamptz
+	SubmittedAt      pgtype.Timestamptz
+	SubmitCount      int32
+	ReviewState      pgtype.Text
+	Review           []byte
+	ReviewTries      int16
+	ReviewNextAt     pgtype.Timestamptz
+	ReviewedAt       pgtype.Timestamptz
 }

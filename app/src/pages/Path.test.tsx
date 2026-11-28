@@ -6,7 +6,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { routes } from '../routes';
 import { resetReadBlock } from '../lib/read';
-import { crossings, roleStatuses } from './Path';
+import { crossings, interleave, roleStatuses } from './Path';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -135,7 +135,57 @@ describe('crossings', () => {
   });
 });
 
+describe('interleave', () => {
+  const t = (id: string, order: number) => ({ id, title: id, order, state: null, lab_state: null });
+  const b = (id: string, order: number, kind = 'quiz') => ({ id, kind, title: id, order, done: false });
+  it('sorts tickets and between items by order, tickets first on a tie', () => {
+    const rows = interleave([t('t1', 1), t('t2', 3)] as never, [b('q', 2), b('s', 3, 'story')] as never);
+    expect(rows.map((r) => r.item.id)).toEqual(['t1', 'q', 't2', 's']);
+  });
+});
+
 describe('Path page', () => {
+  it('lists between items among the tickets with kind, done state and links', async () => {
+    const roles = [
+      role('support-l1', 'Support L1', {
+        tickets_total: 2,
+        items: [
+          { id: 'support-l1/perms-03', title: 'Fix the shared folder', order: 1, state: 'passed', lab_state: null },
+          { id: 'support-l1/disk-01', title: 'Disk full', order: 3, state: null, lab_state: null },
+        ],
+        between_items: [
+          { id: 'support-l1/quiz-01', kind: 'quiz', title: 'Users and logs', order: 2, done: true },
+          { id: 'support-l1/write-01', kind: 'writing', title: 'Standup update', order: 4, done: false },
+          { id: 'support-l1/story-01', kind: 'story', title: 'Elena asks twice', order: 5, done: false },
+          { id: 'support-l1/fb-01', kind: 'feedback', title: 'Reply to Elena', order: 6, done: false },
+        ],
+      }),
+    ];
+    stub(() => Response.json({ path: 'systems-devops', chosen: true, roles }));
+    await mount();
+    const rows = [...container.querySelectorAll('details ol > li')];
+    expect(rows.map((r) => r.querySelector('a')?.getAttribute('href'))).toEqual([
+      '/t/support-l1/perms-03',
+      '/quiz/support-l1/quiz-01',
+      '/t/support-l1/disk-01',
+      '/w/support-l1/write-01',
+      '/story/support-l1/story-01',
+      '/story/support-l1/fb-01',
+    ]);
+    expect(rows[1]?.textContent).toContain('Quiz');
+    expect(rows[1]?.textContent).toContain('Done');
+    expect(rows[3]?.textContent).toContain('Writing');
+    expect(rows[3]?.textContent).toContain('Not done');
+    expect(rows[4]?.textContent).toContain('Story');
+    expect(rows[5]?.textContent).toContain('Feedback');
+  });
+
+  it('keeps the list for a role with no between items', async () => {
+    stub(() => Response.json(fullPath));
+    await mount();
+    expect(container.querySelectorAll('details ol > li').length).toBe(2);
+  });
+
   it('renders the timeline with status, exam line, progress and ticket links', async () => {
     stub(() => Response.json(fullPath));
     await mount();
