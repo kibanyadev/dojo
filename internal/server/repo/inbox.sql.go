@@ -244,3 +244,36 @@ func (q *Queries) MarkInboxRead(ctx context.Context, arg MarkInboxReadParams) (M
 	err := row.Scan(&i.Found, &i.Changed)
 	return i, err
 }
+
+const upsertInboxCheck = `-- name: UpsertInboxCheck :exec
+INSERT INTO inbox_items (org_id, learner_id, kind, ref, title, body, url, push_state, push_next_at)
+VALUES ($1, $2, 'check', $3, $4, $5, $6, 'pending', $7)
+ON CONFLICT (learner_id, kind, ref) DO UPDATE
+SET title = EXCLUDED.title, body = EXCLUDED.body, url = EXCLUDED.url, read_at = NULL, updated_at = $7,
+    push_state = 'pending', push_tries = 0, push_next_at = $7, pushed_at = NULL
+`
+
+type UpsertInboxCheckParams struct {
+	OrgID     pgtype.UUID
+	LearnerID pgtype.UUID
+	Ref       string
+	Title     string
+	Body      string
+	Url       string
+	At        pgtype.Timestamptz
+}
+
+// A check item: one row per learner and ticket. Each newer check upserts it, unread again, and queues a push
+// (design 3.10); updated_at is written only here and by the review upsert.
+func (q *Queries) UpsertInboxCheck(ctx context.Context, arg UpsertInboxCheckParams) error {
+	_, err := q.db.Exec(ctx, upsertInboxCheck,
+		arg.OrgID,
+		arg.LearnerID,
+		arg.Ref,
+		arg.Title,
+		arg.Body,
+		arg.Url,
+		arg.At,
+	)
+	return err
+}
