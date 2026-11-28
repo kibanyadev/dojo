@@ -22,6 +22,9 @@ var ErrWouldDropProgress = errors.New("catalog load refused: items with learner 
 // ErrWouldChangeKind means the load would change the kind of a catalog item learners have progress on.
 var ErrWouldChangeKind = errors.New("catalog load refused: items with learner progress would change kind")
 
+// ErrWouldDropMark means the load would remove belt marks learners hold.
+var ErrWouldDropMark = errors.New("catalog load refused: marks that learners hold would disappear")
+
 var versionRE = regexp.MustCompile(`^[0-9a-f]{12}$`)
 
 var commitRE = regexp.MustCompile(`^[0-9a-f]{12,64}$`)

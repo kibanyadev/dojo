@@ -58,6 +58,7 @@ type ItemReader interface {
 	GetStoryChoice(ctx context.Context, arg repo.GetStoryChoiceParams) (repo.GetStoryChoiceRow, error)
 	GetWrittenWork(ctx context.Context, arg repo.GetWrittenWorkParams) (repo.GetWrittenWorkRow, error)
 	GetSystemFlag(ctx context.Context, key string) ([]byte, error)
+	IsMarkHeld(ctx context.Context, arg repo.IsMarkHeldParams) (bool, error)
 }
 
 // DraftSaver stores one autosave of PUT /v1/items/{id}/draft.
@@ -96,7 +97,7 @@ type Items struct {
 
 // WorkSubmitter stores one submit of POST /v1/items/{id}/submit.
 type WorkSubmitter interface {
-	SubmitWork(ctx context.Context, in repo.SubmitWorkIn) error
+	SubmitWork(ctx context.Context, in repo.SubmitWorkIn) ([]repo.Awarded, error)
 }
 
 // aiReviewsEnabled is the ai_reviews_enabled flag through the cache; a missing row reads as true.
@@ -381,6 +382,13 @@ func (it *Items) view(ctx context.Context, learner pgtype.UUID, id string) (any,
 	return nil, pgx.ErrNoRows
 }
 
+// awardedView is one inbox item a submit created: a mark (slug) or a belt (the belt's name).
+type awardedView struct {
+	Kind    string `json:"kind"`
+	InboxID string `json:"inbox_id"`
+	Slug    string `json:"slug"`
+}
+
 type awardsMarkView struct {
 	Slug  string `json:"slug"`
 	Title string `json:"title"`
@@ -416,11 +424,15 @@ type feedbackView struct {
 	Work       *workView           `json:"work"`
 }
 
-// buildWritten answers a writing or feedback item. Until belt_awards exists (PR 21) a mark is never held.
+// buildWritten answers a writing or feedback item; the mark it awards is held once the learner has one.
 func (it *Items) buildWritten(ctx context.Context, head itemHead, view repo.GetItemViewRow, learner pgtype.UUID) (any, error) {
 	var mark *awardsMarkView
 	if view.AwardsMarkSlug.Valid {
-		mark = &awardsMarkView{Slug: view.AwardsMarkSlug.String, Title: view.AwardsMarkTitle.String}
+		held, err := it.Reader.IsMarkHeld(ctx, repo.IsMarkHeldParams{LearnerID: learner, Slug: view.AwardsMarkSlug.String})
+		if err != nil {
+			return nil, err
+		}
+		mark = &awardsMarkView{Slug: view.AwardsMarkSlug.String, Title: view.AwardsMarkTitle.String, Held: held}
 	}
 	work, err := it.readWork(ctx, learner, head.ID)
 	if err != nil {
@@ -541,7 +553,7 @@ func (it *Items) submit(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	p, _ := principalOf(r.Context())
 	ctx := context.WithoutCancel(r.Context())
-	err := it.Submitter.SubmitWork(ctx, repo.SubmitWorkIn{Learner: p.learner, ItemID: id, Body: body})
+	awarded, err := it.Submitter.SubmitWork(ctx, repo.SubmitWorkIn{Learner: p.learner, ItemID: id, Body: body})
 	switch {
 	case errors.Is(err, repo.ErrItemNotFound):
 		writeError(w, http.StatusNotFound, "not_found")
@@ -559,6 +571,9 @@ func (it *Items) submit(w http.ResponseWriter, r *http.Request, id string) {
 		readFailed(w, r, err)
 		return
 	}
-	// awarded stays empty until the belt marks arrive with the inbox (PR 21).
-	writeNoStore(w, map[string]any{"item": item, "awarded": []any{}})
+	list := make([]awardedView, 0, len(awarded))
+	for _, a := range awarded {
+		list = append(list, awardedView{Kind: a.Kind, InboxID: uuidText(a.InboxID), Slug: a.Slug})
+	}
+	writeNoStore(w, map[string]any{"item": item, "awarded": list})
 }

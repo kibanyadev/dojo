@@ -44,6 +44,16 @@ type AiReview struct {
 	Outcome     string
 }
 
+type BeltAward struct {
+	OrgID        pgtype.UUID
+	LearnerID    pgtype.UUID
+	MarkID       pgtype.UUID
+	SourceItemID string
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	AwardedAt    pgtype.Timestamptz
+}
+
 type BeltMark struct {
 	ID        pgtype.UUID
 	OrgID     pgtype.UUID

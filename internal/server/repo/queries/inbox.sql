@@ -36,12 +36,13 @@ SELECT EXISTS (SELECT 1 FROM inbox_items i WHERE i.id = @id AND i.learner_id = @
 -- name: MarkAllInboxRead :execrows
 UPDATE inbox_items SET read_at = now() WHERE learner_id = $1 AND read_at IS NULL;
 
--- The detail of a mark item (L7): its ref is the mark slug.
+-- The detail of a mark item (L7): its ref is the mark slug; held is whether this learner holds it.
 -- name: GetInboxMarkDetail :one
 SELECT m.slug, m.title, m.summary, m.belt,
+       EXISTS (SELECT 1 FROM belt_awards a WHERE a.mark_id = m.id AND a.learner_id = @learner_id) AS held,
        (SELECT count(*) FROM belt_marks b WHERE b.belt = m.belt) AS total
 FROM belt_marks m
-WHERE m.slug = $1;
+WHERE m.slug = @slug;
 
 -- A check item: one row per learner and ticket. Each newer check upserts it, unread again, and queues a push
 -- (design 3.10); updated_at is written only here and by the review upsert.

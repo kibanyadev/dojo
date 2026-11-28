@@ -65,7 +65,7 @@ func load(t *testing.T, dir, version string) (string, error) {
 func wipe(t *testing.T) {
 	t.Helper()
 	sql := "DELETE FROM hint_opens; DELETE FROM item_completions; DELETE FROM ticket_progress; DELETE FROM learners WHERE github_id = 9101; " +
-		"DELETE FROM catalog_items; DELETE FROM belt_marks; DELETE FROM path_roles; DELETE FROM paths; DELETE FROM roles; DELETE FROM catalog_state"
+		"DELETE FROM catalog_items; DELETE FROM belt_awards; DELETE FROM belt_marks; DELETE FROM path_roles; DELETE FROM paths; DELETE FROM roles; DELETE FROM catalog_state"
 	psql(t, sql)
 	t.Cleanup(func() { psql(t, sql) })
 }

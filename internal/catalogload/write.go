@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/kibanyadev/dojo/internal/catalog"
 )
 
@@ -125,13 +126,46 @@ func write(ctx context.Context, tx pgx.Tx, cat *catalog.Catalog, bundles []*cata
 	if err := exec(`DELETE FROM roles WHERE NOT (slug = ANY($1))`, roleSlugs); err != nil {
 		return err
 	}
-	// Retired marks last: no item points at them any more. A mark learners hold is refused by the
-	// foreign key of the table that records it (the submit PR adds it).
+	// Retired marks last: no item points at them any more. A mark learners hold is refused by name; the
+	// foreign key of belt_awards stays as the backstop. The rows are locked first, so an award racing
+	// this load either lands before the lock (and is seen) or waits and fails its foreign key.
+	if err := refuseHeldMarks(ctx, tx, marks); err != nil {
+		return err
+	}
 	if err := exec(`DELETE FROM belt_marks WHERE NOT (slug = ANY($1))`, marks); err != nil {
 		return err
 	}
 	return exec(`INSERT INTO catalog_state (id, org_id, catalog_version) VALUES (1, $1, $2)
 		ON CONFLICT (id) DO UPDATE SET catalog_version = EXCLUDED.catalog_version, updated_at = now()`, org, version)
+}
+
+// refuseHeldMarks fails with ErrWouldDropMark naming every mark the catalog no longer lists that a
+// learner holds.
+func refuseHeldMarks(ctx context.Context, tx pgx.Tx, keep []string) error {
+	rows, err := tx.Query(ctx, `SELECT id FROM belt_marks WHERE NOT (slug = ANY($1)) FOR UPDATE`, keep)
+	if err != nil {
+		return fmt.Errorf("lock marks: %w", err)
+	}
+	locked, err := pgx.CollectRows(rows, pgx.RowTo[pgtype.UUID])
+	if err != nil {
+		return fmt.Errorf("lock marks: %w", err)
+	}
+	if len(locked) == 0 {
+		return nil
+	}
+	rows, err = tx.Query(ctx, `SELECT m.slug FROM belt_marks m WHERE m.id = ANY($1)
+		AND EXISTS (SELECT 1 FROM belt_awards a WHERE a.mark_id = m.id) ORDER BY m.slug`, locked)
+	if err != nil {
+		return fmt.Errorf("check marks: %w", err)
+	}
+	held, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return fmt.Errorf("check marks: %w", err)
+	}
+	if len(held) > 0 {
+		return fmt.Errorf("%w: %s", ErrWouldDropMark, strings.Join(held, ", "))
+	}
+	return nil
 }
 
 func pairs(cat *catalog.Catalog, path bool) []string {

@@ -61,6 +61,15 @@ func TestWritingFreshView(t *testing.T) {
 	}
 }
 
+func TestWritingHeldMarkReadsFromAwards(t *testing.T) {
+	f := writingFake()
+	f.held = true
+	got := decode(t, itemCall(t, f, http.MethodGet, "/v1/items/support-l1/write-01", false))
+	if mark := got["awards_mark"].(map[string]any); mark["held"] != true {
+		t.Fatalf("awards_mark: %v", mark)
+	}
+}
+
 func TestWritingWithoutMarkHasNullAwardsMark(t *testing.T) {
 	f := writingFake()
 	f.view.AwardsMarkSlug, f.view.AwardsMarkTitle = pgtype.Text{}, pgtype.Text{}
