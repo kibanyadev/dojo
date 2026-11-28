@@ -103,7 +103,7 @@ func run(args []string) error {
 	auth := server.Auth{Store: store.Queries(), Catalog: store.Queries(),
 		Bundles: &server.Bundles{Store: store.Queries(), Signer: objects}, Secure: secure, Events: store,
 		Stream: hub, StreamHeartbeat: heartbeat,
-		Tickets: &server.Tickets{Reader: store.Queries(), Opener: store}, Items: &server.Items{Reader: store.Queries(), Answerer: store, Chooser: store, Drafter: store}, Reports: store,
+		Tickets: &server.Tickets{Reader: store.Queries(), Opener: store}, Items: &server.Items{Reader: store.Queries(), Answerer: store, Chooser: store, Drafter: store}, Inbox: &server.Inbox{Store: store}, Reports: store,
 		Onboarding: &server.Onboarding{Facts: store.Queries(), Doctor: store, Confirmer: store,
 			Env: os.Getenv("DOJO_ENV"), PublicOrigin: strings.TrimRight(os.Getenv("PUBLIC_ORIGIN"), "/")}}
 	cli := &server.CLILogin{GitHub: gh, Store: store.Queries(), Tokens: store}

@@ -425,6 +425,26 @@ var grantCases = []struct {
 	{"dojo_admin", "INSERT INTO quiz_answers (org_id) SELECT id FROM orgs WHERE false", false},
 	{"dojo_admin", "DELETE FROM story_choices WHERE false", false},
 
+	// inbox_items (migration 00028): the API reads, inserts and updates the named columns, never deletes;
+	// dojo_admin has nothing.
+	{"dojo_api", "SELECT id, learner_id, kind, ref, title, body, url, read_at, push_state, push_tries, push_next_at, pushed_at, created_at, updated_at FROM inbox_items", true},
+	{"dojo_api", "INSERT INTO inbox_items (org_id, learner_id, kind, ref, title, body, url, push_state, push_next_at) SELECT org_id, id, 'check', 'a/b', 't', 'b', '/t/a/b', 'pending', now() FROM learners WHERE false", true},
+	{"dojo_api", "INSERT INTO inbox_items (org_id, learner_id, kind, ref, title, body, url, id) SELECT org_id, id, 'check', 'a/b', 't', 'b', '/t/a/b', gen_random_uuid() FROM learners WHERE false", false},
+	{"dojo_api", "INSERT INTO inbox_items (org_id, learner_id, kind, ref, title, body, url, read_at) SELECT org_id, id, 'check', 'a/b', 't', 'b', '/t/a/b', now() FROM learners WHERE false", false},
+	{"dojo_api", "INSERT INTO inbox_items (org_id, learner_id, kind, ref, title, body, url, updated_at) SELECT org_id, id, 'check', 'a/b', 't', 'b', '/t/a/b', now() FROM learners WHERE false", false},
+	{"dojo_api", "INSERT INTO inbox_items (org_id, learner_id, kind, ref, title, body, url, pushed_at) SELECT org_id, id, 'check', 'a/b', 't', 'b', '/t/a/b', now() FROM learners WHERE false", false},
+	{"dojo_api", "UPDATE inbox_items SET updated_at = now(), title = 't', body = 'b', url = '/x', read_at = now(), push_state = 'sent', push_tries = 1, push_next_at = now(), pushed_at = now() WHERE false", true},
+	{"dojo_api", "UPDATE inbox_items SET kind = 'quiz' WHERE false", false},
+	{"dojo_api", "UPDATE inbox_items SET ref = 'x' WHERE false", false},
+	{"dojo_api", "UPDATE inbox_items SET learner_id = learner_id WHERE false", false},
+	{"dojo_api", "UPDATE inbox_items SET id = id WHERE false", false},
+	{"dojo_api", "UPDATE inbox_items SET created_at = now() WHERE false", false},
+	{"dojo_api", "DELETE FROM inbox_items WHERE false", false},
+	{"dojo_api", "TRUNCATE inbox_items", false},
+	{"dojo_admin", "SELECT count(*) FROM inbox_items", false},
+	{"dojo_admin", "INSERT INTO inbox_items (org_id) SELECT id FROM orgs WHERE false", false},
+	{"dojo_admin", "UPDATE inbox_items SET read_at = now() WHERE false", false},
+	{"dojo_admin", "DELETE FROM inbox_items WHERE false", false},
 	// system_flags, written_work and ai_reviews (migration 00027): flags are read-only for both services until A3;
 	// the review worker writes written_work and ai_reviews as dojo_api; dojo_admin has no grant on those two;
 	// prune_ai_reviews() is owner-only.
