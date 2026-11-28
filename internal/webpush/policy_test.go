@@ -117,3 +117,19 @@ func TestTopic(t *testing.T) {
 		t.Fatalf("%q %q", a, b)
 	}
 }
+
+func TestNormalize(t *testing.T) {
+	p, _ := NewPolicy(DefaultHosts, []string{"http://fake-push:8080"})
+	for in, want := range map[string]string{
+		"HTTPS://FCM.Googleapis.com.:443/fcm/send/a?b=c": "https://fcm.googleapis.com/fcm/send/a?b=c",
+		"http://FAKE-PUSH:8080/push/t":                   "http://fake-push:8080/push/t",
+	} {
+		got, err := p.Normalize(in)
+		if err != nil || got != want {
+			t.Errorf("%q: got %q, %v", in, got, err)
+		}
+	}
+	if got, err := p.Normalize("https://evil.example/x"); !errors.Is(err, ErrEndpoint) || got != "" {
+		t.Errorf("refused endpoint: %q, %v", got, err)
+	}
+}

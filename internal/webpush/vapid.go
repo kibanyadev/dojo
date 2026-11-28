@@ -47,7 +47,7 @@ func ParseVAPID(scalar string) (*VAPID, error) {
 // PublicKey is the uncompressed point the browser subscribes with (65 bytes).
 func (v *VAPID) PublicKey() []byte { return v.public }
 
-// IsExample reports whether the key is the public one from .env.example.
+// IsExample reports whether the key is the example key from .env.example.
 func (v *VAPID) IsExample() bool { return v.example }
 
 // Header returns the Authorization value for a push to the origin aud.

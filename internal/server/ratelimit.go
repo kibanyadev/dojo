@@ -22,7 +22,8 @@ const (
 	telemetryAuthBurst = 120
 	// Authenticated event batches, per learner across devices (design 3.8).
 	eventsBurst = 60
-	// Other authenticated writes (PATCH /v1/me, DELETE /v1/me, DELETE /v1/me/devices/{id}), one budget per
+	// Other authenticated writes (PATCH /v1/me, DELETE /v1/me, DELETE /v1/me/devices/{id}, the push subscription
+	// writes), one budget per
 	// learner across routes and devices: a PATCH /v1/me 409 tells whether a username is taken.
 	writeBurst = 10
 	writePer   = time.Minute
@@ -289,13 +290,14 @@ func isInboxWrite(pattern string) bool {
 // isLearnerRead reports the routed patterns that take the per-learner read budget.
 func isLearnerRead(pattern string) bool {
 	return pattern == "GET /v1/catalog" || pattern == "GET /v1/path" || pattern == "GET /v1/today" ||
-		pattern == "GET /v1/activity" || pattern == "GET /v1/practice" || pattern == "GET /v1/belt" || pattern == "GET "+onboardingPath
+		pattern == "GET /v1/activity" || pattern == "GET /v1/practice" || pattern == "GET /v1/belt" || pattern == "GET "+onboardingPath ||
+		pattern == "GET "+pushKeyPath || pattern == "GET "+pushSubsPath
 }
 
 // isLearnerWrite reports the routed patterns that take the per-learner write budget.
 func isLearnerWrite(pattern string) bool {
 	switch pattern {
-	case "PATCH /v1/me", "DELETE /v1/me", "DELETE /v1/me/devices/{id}":
+	case "PATCH /v1/me", "DELETE /v1/me", "DELETE /v1/me/devices/{id}", "POST " + pushSubsPath, "DELETE " + pushSubsPath + "/{id}":
 		return true
 	}
 	return isOnboardingWrite(pattern) || pattern == "PUT "+confirmRoute || pattern == "DELETE "+confirmRoute
