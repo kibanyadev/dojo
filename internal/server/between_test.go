@@ -2,7 +2,6 @@ package server
 
 import (
 	"encoding/json"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -11,32 +10,6 @@ import (
 
 func row(id, role, kind string, pos int32) repo.ListCatalogItemsRow {
 	return repo.ListCatalogItemsRow{ID: id, Role: role, Kind: kind, Position: pos, Title: id, EstMinutes: 5, Tags: []string{}}
-}
-
-func TestUnlockedItems(t *testing.T) {
-	items := []repo.ListCatalogItemsRow{
-		row("r/s", "r", "story", 1), row("r/a", "r", "ticket", 2), row("r/q1", "r", "quiz", 3),
-		row("r/w", "r", "writing", 4), row("r/b", "r", "ticket", 5), row("r/q2", "r", "quiz", 6),
-	}
-	for _, tt := range []struct {
-		name   string
-		passed map[string]bool
-		want   map[string]bool
-	}{
-		{"nothing passed", nil, map[string]bool{"r/s": true, "r/q1": false, "r/w": false, "r/q2": false}},
-		{"first passed", map[string]bool{"r/a": true}, map[string]bool{"r/s": true, "r/q1": true, "r/w": true, "r/q2": false}},
-		{"second passed only", map[string]bool{"r/b": true}, map[string]bool{"r/s": true, "r/q1": false, "r/w": false, "r/q2": true}},
-		{"all passed", map[string]bool{"r/a": true, "r/b": true}, map[string]bool{"r/s": true, "r/q1": true, "r/w": true, "r/q2": true}},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := unlockedItems(items, tt.passed); !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("got %v want %v", got, tt.want)
-			}
-		})
-	}
-	if got := unlockedItems([]repo.ListCatalogItemsRow{row("r/q", "r", "quiz", 1)}, nil); !got["r/q"] {
-		t.Fatalf("role with no tickets: %v", got)
-	}
 }
 
 // betweenCatalog: foundations has a story before its first ticket and a quiz after its last one,

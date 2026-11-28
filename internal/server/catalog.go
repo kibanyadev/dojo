@@ -231,17 +231,14 @@ func buildPath(paths []repo.ListCatalogPathsRow, roles []repo.ListCatalogRolesRo
 	for _, id := range done {
 		isDone[id] = true
 	}
-	passed := map[string]bool{}
-	for _, x := range prog {
-		passed[x.ItemID] = x.State == "passed" || x.State == "revisit"
-	}
+	passed := repo.PassedTickets(prog)
 	for _, pr := range prs {
 		if pr.Path != chosen.Slug {
 			continue
 		}
 		role := roleBySlug[pr.Role]
 		pr := pathRole{Slug: role.Slug, Title: role.Title, Summary: role.Summary, Items: []pathItem{}, BetweenItems: []betweenItem{}}
-		unlocked := unlockedItems(byRole[role.Slug], passed)
+		unlocked := repo.UnlockedItems(byRole[role.Slug], passed)
 		for _, i := range byRole[role.Slug] {
 			if i.Kind != "ticket" {
 				pr.BetweenItems = append(pr.BetweenItems, betweenItem{i.ID, i.Kind, i.Title, i.Position, isDone[i.ID], unlocked[i.ID], i.EstMinutes})

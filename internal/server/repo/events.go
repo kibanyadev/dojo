@@ -79,6 +79,7 @@ func (s *Store) RecordEvents(ctx context.Context, learnerID pgtype.UUID, evs []E
 
 	rows := map[string]*TicketProgress{}
 	doctorChanged := map[string]string{}
+	inboxChanged := false
 	checkItems := map[string]bool{}
 	for _, e := range evs {
 		_, err := q.InsertEvent(ctx, InsertEventParams{
@@ -163,6 +164,16 @@ func (s *Store) RecordEvents(ctx context.Context, learnerID pgtype.UUID, evs []E
 			if err := applyPendingCommit(ctx, q, &next, now); err != nil {
 				return res, err
 			}
+			added, err := unlockOnFirstPass(ctx, q, l, next.ItemID, ts(now))
+			if err != nil {
+				return res, err
+			}
+			inboxChanged = inboxChanged || added
+		}
+	}
+	if inboxChanged {
+		if err := notifyInbox(ctx, tx, l.ID); err != nil {
+			return res, fmt.Errorf("notify inbox: %w", err)
 		}
 	}
 	if err := notifyProgress(ctx, tx, l.ID, rows); err != nil {
