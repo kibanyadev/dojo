@@ -289,7 +289,7 @@ func isInboxWrite(pattern string) bool {
 // isLearnerRead reports the routed patterns that take the per-learner read budget.
 func isLearnerRead(pattern string) bool {
 	return pattern == "GET /v1/catalog" || pattern == "GET /v1/path" || pattern == "GET /v1/today" ||
-		pattern == "GET /v1/activity" || pattern == "GET /v1/practice" || pattern == "GET "+onboardingPath
+		pattern == "GET /v1/activity" || pattern == "GET /v1/practice" || pattern == "GET /v1/belt" || pattern == "GET "+onboardingPath
 }
 
 // isLearnerWrite reports the routed patterns that take the per-learner write budget.

@@ -1951,7 +1951,12 @@ slug) before the items that point at it, and refuses to drop a mark that a learn
 - **`GET /v1/belt`,** cookie or bearer, the read budget, `no-store`. The current belt is the first in
   the fixed order that has marks and is not held, and `next_belt` the one after it in the fixed order;
   when every belt with marks is held, it is the last of them with `"complete": true` and
-  `"next_belt": null`:
+  `"next_belt": null`. `title` is the belt's name with " belt" after it ("White belt"), `held` and
+  `total` count that belt's marks, and `marks` follow their position in the belt, each with the
+  `awarded_at` of this learner's award in RFC 3339 UTC or null. A catalog with no marks at all reads
+  as the first belt with `"total": 0`, `"held": 0`, `"marks": []` and `"next_belt": "yellow"`; a belt
+  with no marks in between is skipped, and `next_belt` is always the next one in the fixed order even
+  when it has no marks:
 
 ```json
 {"belt": "white", "title": "White belt", "complete": false, "held": 2, "total": 4,
@@ -2378,6 +2383,7 @@ every 10 s and one answer per click stay far under it.
 | Route | Credential | Budget | Answer | New errors |
 |---|---|---|---|---|
 | `GET /v1/practice` | cookie or bearer | reads (120) | `200` | |
+| `GET /v1/belt` | cookie or bearer | reads | `200` | |
 | `GET /v1/items/{id}` | cookie or bearer | reads | `200` | `404 not_found` |
 | `PUT /v1/items/{id}/draft` | cookie or bearer | between (60) | `200 {"draft_saved_at"}` | `404 not_found`, `400 bad_request` |
 | `POST /v1/items/{id}/submit` | cookie or bearer | between | `200 {"item", "awarded"}` | `404 not_found`, `400 bad_request` |
