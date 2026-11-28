@@ -116,8 +116,8 @@ describe('Today with a ticket in progress', () => {
     expect(list.querySelector<HTMLAnchorElement>('a[href="/t/support-l1/ssh-01"]')).not.toBeNull();
   });
 
-  it('has no search or bell the app cannot back, and an avatar to Settings', () => {
-    expect(container.querySelector('header button[aria-label^="Notifications"]')).toBeNull();
+  it('has the inbox bell, no search the app cannot back, and an avatar to Settings', () => {
+    expect(container.querySelector('header button[aria-label^="Notifications"]')).not.toBeNull();
     expect(container.textContent).not.toContain('Search or run a command');
     const avatar = container.querySelector('header a[href="/settings"]')!;
     expect(avatar.getAttribute('aria-label')).toBe('Settings, @irene');
