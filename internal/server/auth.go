@@ -68,6 +68,8 @@ type Auth struct {
 	Reports ReportStore
 	// Items backs GET /v1/items/{id}; nil leaves the route out.
 	Items *Items
+	// Inbox backs /v1/inbox; nil leaves the routes out.
+	Inbox *Inbox
 }
 
 // ParseOrigin validates PUBLIC_ORIGIN for the environment (local, pre or pro) and reports

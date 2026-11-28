@@ -61,6 +61,12 @@ func New(ready Readiness, auth Auth, limits *RateLimits, signin *SignIn, cli *CL
 		mux.HandleFunc("POST "+itemsPrefix, requireSession(auth.postItemRoute))
 		mux.HandleFunc("PUT "+itemsPrefix, requireSession(auth.putItemRoute))
 	}
+	if auth.Inbox != nil {
+		mux.HandleFunc("GET /v1/inbox", requireSession(auth.Inbox.list))
+		mux.HandleFunc("GET /v1/inbox/{id}", requireSession(auth.Inbox.get))
+		mux.HandleFunc("POST /v1/inbox/{id}/read", requireSession(auth.Inbox.read))
+		mux.HandleFunc("POST /v1/inbox/read-all", requireSession(auth.Inbox.readAll))
+	}
 	if auth.Reports != nil {
 		mux.HandleFunc("POST "+reportsPath, requireSession(auth.postReport))
 	}
