@@ -1944,6 +1944,10 @@ slug) before the items that point at it, and refuses to drop a mark that a learn
   NOTHING`; a new row adds a `mark` inbox item. When that award makes the learner hold every mark the
   catalog lists for that belt, the same transaction adds a `belt` inbox item (unique per belt, so it
   is written once). A belt is held when every mark of it is held, derived on read, never stored.
+  Both items are inserted with the url `/celebrate` and pointed at `/celebrate/<id>` in the same
+  transaction (an inbox id cannot be inserted), so no row commits with the placeholder. A `belt`
+  entry of `awarded` carries the belt's name as its `slug`; the last belt, with no next one, reads
+  "<n> marks. Black belt complete."
 - **`GET /v1/belt`,** cookie or bearer, the read budget, `no-store`. The current belt is the first in
   the fixed order that has marks and is not held, and `next_belt` the one after it in the fixed order;
   when every belt with marks is held, it is the last of them with `"complete": true` and
@@ -2193,9 +2197,10 @@ writing `/w/<id>`, story and feedback `/story/<id>`, quiz `/quiz/<id>`, ticket a
 
   `GET /v1/inbox/{id}` (read budget, `no-store`) answers one item, plus `detail` for `mark`
   (`{"slug", "title", "summary", "belt", "held", "total"}`) and `belt` (`{"belt", "title",
-  "next_belt"}`), which L7 and L8 draw. Until PR 21 creates `belt_awards`, `held` is false and the
-  mark's `total` is the count of `belt_marks` rows for its belt; the same holds for `awards_mark.held`
-  in the item view (PR 15). PR 21 switches both reads to `belt_awards`. An id that is not a canonical UUID, an unknown id and another
+  "next_belt"}`), which L7 and L8 draw. `held` is true when the learner has a `belt_awards` row for the
+  mark (PR 21; before it was always false) and the mark's `total` is the count of `belt_marks` rows for
+  its belt; `awards_mark.held` in the item view reads the same way. `held` is a boolean here: a page that
+  shows "n of 4" reads the counts from `GET /v1/belt`. An id that is not a canonical UUID, an unknown id and another
   learner's id are the same `404 not_found`, on this route and on `POST /v1/inbox/{id}/read`.
   `POST /v1/inbox/{id}/read` and `POST /v1/inbox/read-all` answer `204` (the between-tickets budget);
   "Mark all read" is the second. Both have no body, and the app sends the JSON content type and

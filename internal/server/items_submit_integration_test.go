@@ -46,11 +46,15 @@ func TestSubmitFlowIntegration(t *testing.T) {
 	if err != nil || code != 200 || h.Get("Cache-Control") != "no-store" || json.Unmarshal([]byte(body), &got) != nil ||
 		got.Item.Kind != "writing" || !got.Item.Done || got.Item.Work.Body != "Hi Elena,\nthe team group owns it now." ||
 		got.Item.Work.Draft != got.Item.Work.Body || got.Item.Work.SubmitCount != 1 || got.Item.Work.ReviewState != "pending" ||
-		got.Item.Work.SubmittedAt == "" || got.Item.Work.Review != nil || got.Awarded == nil || len(got.Awarded) != 0 {
+		got.Item.Work.SubmittedAt == "" || got.Item.Work.Review != nil || got.Awarded == nil || len(got.Awarded) != 2 {
 		t.Fatalf("first submit: %d %s %v", code, body, err)
 	}
 	if ev := s.next("item", 5*time.Second); ev.data != `{"item_id":"foundations/w","kind":"writing"}` {
 		t.Fatalf("event data: %s", ev.data)
+	}
+	// The mark and the belt (the fixture's white belt has one mark) reach the bell in the same commit.
+	if ev := s.next("inbox", 5*time.Second); ev.data != `{}` {
+		t.Fatalf("inbox event data: %s", ev.data)
 	}
 	if n := dbCount(t, "item_completions", "foundations/w", "1001"); strings.TrimSpace(n) != "1" {
 		t.Fatalf("completion rows: %s", n)

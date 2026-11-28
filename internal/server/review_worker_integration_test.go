@@ -85,10 +85,10 @@ func TestReviewWorkerWritesTheReviewIntegration(t *testing.T) {
 	if got := asOwner(t, "SELECT model || '|' || outcome || '|' || submit_count || '|' || (learner_id IS NOT NULL) FROM ai_reviews"); got != "standin|ok|1|true" {
 		t.Fatalf("call row: %q", got)
 	}
-	if got := asOwner(t, "SELECT kind || '|' || ref || '|' || title || '|' || body || '|' || url || '|' || push_state || '|' || (read_at IS NULL) FROM inbox_items"); got != "review_ready|foundations/w|Review ready: Tell Elena|1 of 2 criteria|/w/foundations/w|none|true" {
+	if got := asOwner(t, "SELECT kind || '|' || ref || '|' || title || '|' || body || '|' || url || '|' || push_state || '|' || (read_at IS NULL) FROM inbox_items WHERE kind = 'review_ready'"); got != "review_ready|foundations/w|Review ready: Tell Elena|1 of 2 criteria|/w/foundations/w|none|true" {
 		t.Fatalf("inbox item: %q", got)
 	}
-	if ev := s.next("review", 5*time.Second); ev.data != `{"item_id":"foundations/w","review_state":"done"}` {
+	if ev := nextSkipInbox(t, s, "review"); ev.data != `{"item_id":"foundations/w","review_state":"done"}` {
 		t.Fatalf("review event: %s", ev.data)
 	}
 	s.next("inbox", 5*time.Second)
@@ -100,11 +100,11 @@ func TestReviewWorkerWritesTheReviewIntegration(t *testing.T) {
 	asOwner(t, "UPDATE inbox_items SET read_at = now(), updated_at = now() - interval '1 hour'")
 	submitWork(t, tok, "foundations/w", "found and next")
 	tick(t, w)
-	if got := asOwner(t, "SELECT count(*) || '|' || bool_and(read_at IS NULL) || '|' || bool_and(updated_at > now() - interval '1 minute') || '|' || min(body) FROM inbox_items"); got != "1|true|true|2 of 2 criteria" {
+	if got := asOwner(t, "SELECT count(*) || '|' || bool_and(read_at IS NULL) || '|' || bool_and(updated_at > now() - interval '1 minute') || '|' || min(body) FROM inbox_items WHERE kind = 'review_ready'"); got != "1|true|true|2 of 2 criteria" {
 		t.Fatalf("upserted item: %q", got)
 	}
 	// The other learners have no item (isolation).
-	if got := asOwner(t, "SELECT count(*) FROM inbox_items i JOIN learners l ON l.id = i.learner_id WHERE l.github_id <> 1001"); got != "0" {
+	if got := asOwner(t, "SELECT count(*) FROM inbox_items i JOIN learners l ON l.id = i.learner_id WHERE i.kind = 'review_ready' AND l.github_id <> 1001"); got != "0" {
 		t.Fatalf("foreign inbox rows: %s", got)
 	}
 }
@@ -144,10 +144,10 @@ func TestReviewWorkerRetriesThenFailsIntegration(t *testing.T) {
 	if got := asOwner(t, "SELECT count(*) || '|' || count(*) FILTER (WHERE outcome = 'error' AND model = 'unknown') FROM ai_reviews"); got != "2|1" {
 		t.Fatalf("calls: %q", got)
 	}
-	if ev := s.next("review", 5*time.Second); ev.data != `{"item_id":"foundations/w","review_state":"failed"}` {
+	if ev := nextSkipInbox(t, s, "review"); ev.data != `{"item_id":"foundations/w","review_state":"failed"}` {
 		t.Fatalf("event: %s", ev.data)
 	}
-	if got := asOwner(t, "SELECT count(*) FROM inbox_items"); got != "0" {
+	if got := asOwner(t, "SELECT count(*) FROM inbox_items WHERE kind = 'review_ready'"); got != "0" {
 		t.Fatalf("inbox rows: %s", got)
 	}
 }
@@ -212,7 +212,7 @@ func TestReviewWorkerDiscardsAStaleResultIntegration(t *testing.T) {
 	if got := asOwner(t, "SELECT count(*) FROM ai_reviews"); got != "1" {
 		t.Fatalf("the call is still recorded: %s", got)
 	}
-	if got := asOwner(t, "SELECT count(*) FROM inbox_items"); got != "0" {
+	if got := asOwner(t, "SELECT count(*) FROM inbox_items WHERE kind = 'review_ready'"); got != "0" {
 		t.Fatalf("inbox rows: %s", got)
 	}
 }
@@ -245,7 +245,29 @@ func TestReviewWorkerPausedAndCappedIntegration(t *testing.T) {
 	if got := asOwner(t, "SELECT count(*) FROM ai_reviews"); got != "20" {
 		t.Fatalf("a capped row made a call: %s", got)
 	}
-	if got := asOwner(t, "SELECT count(*) FROM inbox_items"); got != "0" {
+	if got := asOwner(t, "SELECT count(*) FROM inbox_items WHERE kind = 'review_ready'"); got != "0" {
 		t.Fatalf("inbox rows: %s", got)
+	}
+}
+
+// nextSkipInbox waits for want, skipping inbox events: a submit that awards a belt mark sends one too.
+func nextSkipInbox(t *testing.T, s *sseStream, want string) sseEvent {
+	t.Helper()
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case ev, ok := <-s.events:
+			if !ok {
+				t.Fatalf("stream closed while waiting for %q", want)
+			}
+			if ev.name == want {
+				return ev
+			}
+			if ev.name != "inbox" && ev.name != "heartbeat" && ev.name != "ready" {
+				t.Fatalf("waiting for %q, got %q %s", want, ev.name, ev.data)
+			}
+		case <-deadline:
+			t.Fatalf("no %q within 5s", want)
+		}
 	}
 }

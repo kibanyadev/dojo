@@ -222,9 +222,8 @@ func (in *Inbox) get(w http.ResponseWriter, r *http.Request) {
 	out := inboxItemDetail{inboxItemView: viewInboxRow(item.InboxRow)}
 	switch item.Kind {
 	case "mark":
-		// held is false until PR 21 creates belt_awards and switches this read to it.
 		if m := item.Mark; m != nil {
-			out.Detail = inboxMarkDetail{Slug: m.Slug, Title: m.Title, Summary: m.Summary, Belt: m.Belt, Held: false, Total: m.Total}
+			out.Detail = inboxMarkDetail{Slug: m.Slug, Title: m.Title, Summary: m.Summary, Belt: m.Belt, Held: m.Held, Total: m.Total}
 		}
 	case "belt":
 		out.Detail = beltDetail(item.Ref)

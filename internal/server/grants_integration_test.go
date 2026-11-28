@@ -425,6 +425,21 @@ var grantCases = []struct {
 	{"dojo_admin", "INSERT INTO quiz_answers (org_id) SELECT id FROM orgs WHERE false", false},
 	{"dojo_admin", "DELETE FROM story_choices WHERE false", false},
 
+	// belt_awards (migration 00029): the API reads and inserts an award once, never changes or removes it;
+	// dojo_admin reads it.
+	{"dojo_api", "SELECT learner_id, mark_id, source_item_id, awarded_at, created_at, updated_at FROM belt_awards", true},
+	{"dojo_api", "INSERT INTO belt_awards (org_id, learner_id, mark_id, source_item_id) SELECT org_id, id, gen_random_uuid(), 'a/b' FROM learners WHERE false", true},
+	{"dojo_api", "INSERT INTO belt_awards (org_id, learner_id, mark_id, source_item_id, awarded_at) SELECT org_id, id, gen_random_uuid(), 'a/b', now() FROM learners WHERE false", false},
+	{"dojo_api", "INSERT INTO belt_awards (org_id, learner_id, mark_id, source_item_id, created_at) SELECT org_id, id, gen_random_uuid(), 'a/b', now() FROM learners WHERE false", false},
+	{"dojo_api", "UPDATE belt_awards SET source_item_id = 'x' WHERE false", false},
+	{"dojo_api", "UPDATE belt_awards SET awarded_at = now() WHERE false", false},
+	{"dojo_api", "UPDATE belt_awards SET updated_at = now() WHERE false", false},
+	{"dojo_api", "DELETE FROM belt_awards WHERE false", false},
+	{"dojo_api", "TRUNCATE belt_awards", false},
+	{"dojo_admin", "SELECT learner_id, mark_id, source_item_id, awarded_at FROM belt_awards", true},
+	{"dojo_admin", "INSERT INTO belt_awards (org_id) SELECT id FROM orgs WHERE false", false},
+	{"dojo_admin", "UPDATE belt_awards SET source_item_id = 'x' WHERE false", false},
+	{"dojo_admin", "DELETE FROM belt_awards WHERE false", false},
 	// inbox_items (migration 00028): the API reads, inserts and updates the named columns, never deletes;
 	// dojo_admin has nothing.
 	{"dojo_api", "SELECT id, learner_id, kind, ref, title, body, url, read_at, push_state, push_tries, push_next_at, pushed_at, created_at, updated_at FROM inbox_items", true},

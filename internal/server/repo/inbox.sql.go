@@ -62,28 +62,36 @@ func (q *Queries) GetInboxItem(ctx context.Context, arg GetInboxItemParams) (Get
 
 const getInboxMarkDetail = `-- name: GetInboxMarkDetail :one
 SELECT m.slug, m.title, m.summary, m.belt,
+       EXISTS (SELECT 1 FROM belt_awards a WHERE a.mark_id = m.id AND a.learner_id = $1) AS held,
        (SELECT count(*) FROM belt_marks b WHERE b.belt = m.belt) AS total
 FROM belt_marks m
-WHERE m.slug = $1
+WHERE m.slug = $2
 `
+
+type GetInboxMarkDetailParams struct {
+	LearnerID pgtype.UUID
+	Slug      string
+}
 
 type GetInboxMarkDetailRow struct {
 	Slug    string
 	Title   string
 	Summary string
 	Belt    string
+	Held    bool
 	Total   int64
 }
 
-// The detail of a mark item (L7): its ref is the mark slug.
-func (q *Queries) GetInboxMarkDetail(ctx context.Context, slug string) (GetInboxMarkDetailRow, error) {
-	row := q.db.QueryRow(ctx, getInboxMarkDetail, slug)
+// The detail of a mark item (L7): its ref is the mark slug; held is whether this learner holds it.
+func (q *Queries) GetInboxMarkDetail(ctx context.Context, arg GetInboxMarkDetailParams) (GetInboxMarkDetailRow, error) {
+	row := q.db.QueryRow(ctx, getInboxMarkDetail, arg.LearnerID, arg.Slug)
 	var i GetInboxMarkDetailRow
 	err := row.Scan(
 		&i.Slug,
 		&i.Title,
 		&i.Summary,
 		&i.Belt,
+		&i.Held,
 		&i.Total,
 	)
 	return i, err

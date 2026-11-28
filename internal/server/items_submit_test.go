@@ -9,19 +9,38 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/kibanyadev/dojo/internal/server/repo"
 )
 
 type fakeSubmitter struct {
-	in    repo.SubmitWorkIn
-	calls int
-	err   error
+	in      repo.SubmitWorkIn
+	calls   int
+	err     error
+	awarded []repo.Awarded
 }
 
-func (f *fakeSubmitter) SubmitWork(_ context.Context, in repo.SubmitWorkIn) error {
+func (f *fakeSubmitter) SubmitWork(_ context.Context, in repo.SubmitWorkIn) ([]repo.Awarded, error) {
 	f.calls++
 	f.in = in
-	return f.err
+	return f.awarded, f.err
+}
+
+func TestSubmitAnswersAwardedItems(t *testing.T) {
+	id := pgtype.UUID{Bytes: [16]byte{0x01, 0x94, 15: 7}, Valid: true}
+	f := &fakeSubmitter{awarded: []repo.Awarded{{Kind: "mark", InboxID: id, Slug: "written-english"}, {Kind: "belt", InboxID: id, Slug: "white"}}}
+	rec := submitCall(t, f, NewRateLimits(1), http.MethodPost, submitPath, `{"body":"Hi"}`, true)
+	got, _ := decode(t, rec)["awarded"].([]any)
+	if len(got) != 2 {
+		t.Fatalf("body: %s", rec.Body)
+	}
+	first, _ := got[0].(map[string]any)
+	second, _ := got[1].(map[string]any)
+	if len(first) != 3 || first["kind"] != "mark" || first["slug"] != "written-english" || first["inbox_id"] != uuidText(id) ||
+		second["kind"] != "belt" || second["slug"] != "white" {
+		t.Fatalf("awarded: %v", got)
+	}
 }
 
 const submitPath = "/v1/items/support-l1/write-01/submit"

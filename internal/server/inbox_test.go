@@ -245,10 +245,10 @@ func TestInboxItemKinds(t *testing.T) {
 
 	row.Kind, row.Ref = "mark", "written-english"
 	mark := &fakeInbox{item: repo.InboxEntry{InboxRow: row, Mark: &repo.InboxMark{Slug: "written-english",
-		Title: "Written English for tickets", Summary: "Write a reply", Belt: "white", Total: 4}}}
+		Title: "Written English for tickets", Summary: "Write a reply", Belt: "white", Held: true, Total: 4}}}
 	d := decode(t, inboxCall(t, mark, http.MethodGet, "/v1/inbox/"+inboxID, false, false))["detail"].(map[string]any)
 	if d["slug"] != "written-english" || d["title"] != "Written English for tickets" || d["summary"] != "Write a reply" ||
-		d["belt"] != "white" || d["held"] != false || d["total"] != float64(4) || len(d) != 6 {
+		d["belt"] != "white" || d["held"] != true || d["total"] != float64(4) || len(d) != 6 {
 		t.Fatalf("mark detail: %v", d)
 	}
 
