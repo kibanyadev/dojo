@@ -1,7 +1,8 @@
 import { Link, Navigate } from 'react-router';
 import { AppFrame } from '../components/AppFrame';
 import type { Me } from '../lib/me';
-import { READ_MESSAGES, ReadError, useCatalog, usePath, type Catalog, type LearnerPath, type PathItem, type PathRole, type TicketState } from '../lib/read';
+import { BETWEEN_LABEL, itemHref } from '../lib/today';
+import { READ_MESSAGES, ReadError, useCatalog, usePath, type BetweenItem, type Catalog, type LearnerPath, type PathItem, type PathRole, type TicketState } from '../lib/read';
 import { useLiveData } from '../lib/stream';
 
 type RoleStatus = 'passed' | 'here' | 'next' | 'soon';
@@ -52,17 +53,42 @@ function Marker({ status, locked }: { status: RoleStatus; locked: boolean }) {
   );
 }
 
-function Items({ items }: { items: PathItem[] }) {
+type Row = { kind: 'ticket'; order: number; item: PathItem } | { kind: 'between'; order: number; item: BetweenItem };
+
+/** Tickets and between items of one role in one list, by `order` (the shared position); tickets first on a tie. */
+export function interleave(items: PathItem[], between: BetweenItem[]): Row[] {
+  const rows: Row[] = [
+    ...items.map((item): Row => ({ kind: 'ticket', order: item.order, item })),
+    ...between.map((item): Row => ({ kind: 'between', order: item.order, item })),
+  ];
+  return rows.sort((a, b) => a.order - b.order || (a.kind === b.kind ? 0 : a.kind === 'ticket' ? -1 : 1));
+}
+
+const ROW = 'flex min-h-11 items-center justify-between gap-3 rounded-[10px] px-2 text-sm text-fg no-underline hover:bg-surface2';
+
+function Items({ items, between }: { items: PathItem[]; between: BetweenItem[] }) {
   return (
     <ol className="m-0 mt-1 flex list-none flex-col p-0">
-      {items.map((it) => {
+      {interleave(items, between).map((row) => {
+        if (row.kind === 'between') {
+          const it = row.item;
+          return (
+            <li key={it.id}>
+              <Link to={itemHref(it.kind, it.id)} className={ROW}>
+                <span>
+                  <span className="font-mono text-xs text-muted">{it.order}. </span>
+                  <span className="font-mono text-xs font-bold tracking-[0.6px] text-accentink uppercase">{BETWEEN_LABEL[it.kind]}</span> · {it.title}
+                </span>
+                <span className={`font-mono text-xs ${it.done ? 'text-ok' : 'text-muted'}`}>{it.done ? 'Done' : 'Not done'}</span>
+              </Link>
+            </li>
+          );
+        }
+        const it = row.item;
         const label = ITEM_LABEL[it.state ?? 'none'];
         return (
           <li key={it.id}>
-            <Link
-              to={`/t/${it.id}`}
-              className="flex min-h-11 items-center justify-between gap-3 rounded-[10px] px-2 text-sm text-fg no-underline hover:bg-surface2"
-            >
+            <Link to={`/t/${it.id}`} className={ROW}>
               <span>
                 <span className="font-mono text-xs text-muted">{it.order}. </span>
                 {it.title}
@@ -87,7 +113,8 @@ function RoleRow({ role, status, hereTitle, hasExam, last }: { role: PathRole; s
   if (last && status !== 'passed' && status !== 'here') note = 'the destination';
   else if (status === 'soon') note = 'coming later';
   else if (status === 'next' && hereTitle) note = `after ${hereTitle}`;
-  const hasTickets = role.tickets_total > 0 && status !== 'soon';
+  const between = role.between_items ?? [];
+  const hasTickets = (role.tickets_total > 0 || between.length > 0) && status !== 'soon';
   return (
     <li className="relative flex gap-3.5">
       {!last && <span aria-hidden="true" className="absolute top-8 -bottom-0 left-[15px] w-0.5 bg-line" />}
@@ -114,7 +141,7 @@ function RoleRow({ role, status, hereTitle, hasExam, last }: { role: PathRole; s
             <summary className="flex min-h-11 w-fit cursor-pointer items-center text-[13px] font-bold text-accentink">
               Tickets in {role.title}
             </summary>
-            <Items items={role.items} />
+            <Items items={role.items} between={between} />
           </details>
         )}
       </div>

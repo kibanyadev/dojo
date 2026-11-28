@@ -16,11 +16,12 @@ import {
   type FirstRun,
   type Ticket,
   type Today as TodayData,
+  type TodayBetween,
   type TodayTicket,
 } from '../lib/read';
 import { patchMe } from '../lib/settings';
 import { useLiveData } from '../lib/stream';
-import { ago, buildHeatGrid, capitalize, heatSummary, initial, parseBrief, shortCommit, type BriefMessage } from '../lib/today';
+import { ago, BETWEEN_LABEL, buildHeatGrid, capitalize, heatSummary, initial, itemHref, parseBrief, shortCommit, type BriefMessage } from '../lib/today';
 
 const card = 'flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5';
 const badge = 'inline-flex h-[26px] flex-none items-center rounded-md px-2.5 text-xs font-bold whitespace-nowrap';
@@ -368,9 +369,33 @@ function Recent({ last, current, next, role }: { last: Activity['recent'][number
   );
 }
 
+const OPEN_LABEL: Record<TodayBetween['kind'], string> = {
+  story: 'Open the story',
+  quiz: 'Open the quiz',
+  writing: 'Open the writing task',
+  feedback: 'Open the feedback round',
+};
+
+/** The one item between tickets (design 3.10): the dark card of the L1 board. Never blocks, so no skip. */
+function BetweenCard({ item }: { item: TodayBetween }) {
+  const eyebrow = item.kind === 'story' ? 'Story · your team' : `${BETWEEN_LABEL[item.kind]} · ${item.est_minutes} min`;
+  return (
+    <section aria-label="Between tickets" className="relative flex flex-col gap-3 rounded-[20px] bg-fg p-5 text-bg md:p-[22px]">
+      <p className="m-0 text-xs font-bold tracking-[0.8px] uppercase opacity-70">{eyebrow}</p>
+      <p className="m-0 text-[15px] leading-normal font-semibold md:text-base">{item.title}</p>
+      <Link
+        to={itemHref(item.kind, item.id)}
+        className="inline-flex h-11 items-center self-start rounded-[10px] bg-bg px-4 text-sm font-bold text-fg no-underline after:absolute after:inset-0 after:content-[''] md:after:hidden"
+      >
+        {OPEN_LABEL[item.kind]}
+      </Link>
+    </section>
+  );
+}
+
 // ---------------------------------------------------------------- views
 
-function CurrentView({ current, next, role }: { current: TodayTicket; next: TodayTicket | null; role: TodayData['role'] }) {
+function CurrentView({ current, next, role, between }: { current: TodayTicket; next: TodayTicket | null; role: TodayData['role']; between: TodayBetween | null }) {
   const activity = useActivity();
   const ticket = useTicketIf(current.id);
   const last = lastPass(activity.data);
@@ -406,6 +431,7 @@ function CurrentView({ current, next, role }: { current: TodayTicket; next: Toda
           </div>
         )}
         <ActivitySlot query={activity} />
+        {between && <BetweenCard item={between} />}
       </aside>
     </div>
   );
@@ -427,12 +453,14 @@ function NextView({
   role,
   name,
   firstRun,
+  between,
   continuing = false,
 }: {
   next: TodayTicket;
   role: TodayData['role'];
   name: string;
   firstRun: FirstRun | null;
+  between: TodayBetween | null;
   continuing?: boolean;
 }) {
   const activityQuery = useActivity();
@@ -499,6 +527,7 @@ function NextView({
         <aside aria-label="Your progress" className="flex flex-col gap-[18px]">
           {role && <RoleCard role={role} />}
           {activity && (first ? <ActivityNote activity={activity} /> : <ActivityPanel activity={activity} />)}
+          {between && <BetweenCard item={between} />}
         </aside>
       </div>
     </div>
@@ -563,11 +592,11 @@ export function Today({ me }: { me: Me }) {
       </div>
     );
   } else {
-    const { current, next, role, all_passed: allPassed, first_run: firstRun = null } = today.data;
+    const { current, next, role, all_passed: allPassed, first_run: firstRun = null, between = null } = today.data;
     if (firstRun && (current ?? next)) {
-      body = <NextView next={(current ?? next)!} role={role} name={me.username} firstRun={firstRun} continuing={current !== null} />;
-    } else if (current) body = <CurrentView current={current} next={next} role={role} />;
-    else if (next) body = <NextView next={next} role={role} name={me.username} firstRun={null} />;
+      body = <NextView next={(current ?? next)!} role={role} name={me.username} firstRun={firstRun} between={between} continuing={current !== null} />;
+    } else if (current) body = <CurrentView current={current} next={next} role={role} between={between} />;
+    else if (next) body = <NextView next={next} role={role} name={me.username} firstRun={null} between={between} />;
     else if (allPassed && role) {
       body = (
         <div className={grid2}>
@@ -577,7 +606,10 @@ export function Today({ me }: { me: Me }) {
               See your path
             </Link>
           </Notice>
-          <RoleCard role={role} />
+          <div className="flex flex-col gap-[18px]">
+            <RoleCard role={role} />
+            {between && <BetweenCard item={between} />}
+          </div>
         </div>
       );
     } else {
@@ -587,6 +619,7 @@ export function Today({ me }: { me: Me }) {
           <Link to="/path" className={`${primaryBtn} self-start`}>
             See your path
           </Link>
+          {between && <BetweenCard item={between} />}
         </Notice>
       );
     }
