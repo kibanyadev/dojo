@@ -221,12 +221,17 @@ export function resetReadBlock(): void {
   blockedUntil = 0;
 }
 
-function retryAfterMs(res: Response): number {
+export function retryAfterMs(res: Response): number {
   const seconds = Number(res.headers.get('Retry-After'));
   return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) * 1000 : 1000;
 }
 
-async function getJSON<T>(path: string): Promise<T> {
+/** A 429 on a write holds back every read until Retry-After, like a 429 on a read. */
+export function noteRateLimit(waitMs: number): void {
+  blockedUntil = Math.max(blockedUntil, Date.now() + waitMs);
+}
+
+export async function getJSON<T>(path: string): Promise<T> {
   for (let wait = blockedUntil - Date.now(); wait > 0; wait = blockedUntil - Date.now()) {
     await new Promise((resolve) => setTimeout(resolve, wait));
   }

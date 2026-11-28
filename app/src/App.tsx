@@ -14,6 +14,7 @@ import { PathPage } from './pages/Path';
 import { PracticePage } from './pages/Practice';
 import { SignInPage } from './pages/SignIn';
 import { TicketPage } from './pages/Ticket';
+import { StoryPage } from './pages/Story';
 
 function Loading() {
   return (
@@ -140,6 +141,15 @@ export function TicketRoute() {
   if (me.isError) return <MeFailed error={me.error} retry={() => void me.refetch()} />;
   if (me.data === null) return <Navigate to="/signin" replace />;
   return <TicketPage me={me.data} />;
+}
+
+// /app/story/<role>/<item>: same guard as /app.
+export function StoryRoute() {
+  const me = useMe();
+  if (me.isPending) return <Loading />;
+  if (me.isError) return <MeFailed error={me.error} retry={() => void me.refetch()} />;
+  if (me.data === null) return <Navigate to="/signin" replace />;
+  return <StoryPage me={me.data} />;
 }
 
 // /app/signin: a signed-in browser has nothing to do here.

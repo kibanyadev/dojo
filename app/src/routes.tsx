@@ -1,5 +1,5 @@
 import { Navigate, type RouteObject } from 'react-router';
-import { App, MachinesRoute, PathRoute, PracticeRoute, SettingsRoute, SignInRoute, StartRoute, StartStepRoute, TicketRoute, TodayRoute, YourAIRoute } from './App';
+import { App, MachinesRoute, PathRoute, PracticeRoute, SettingsRoute, SignInRoute, StartRoute, StartStepRoute, StoryRoute, TicketRoute, TodayRoute, YourAIRoute } from './App';
 import { AnalyticsLayout, type PageHandle } from './components/AnalyticsLayout';
 
 const page = (pattern: string): PageHandle => ({ page: pattern });
@@ -17,6 +17,7 @@ export const routes: RouteObject[] = [
       { path: '/path', element: <PathRoute />, handle: page('/path') },
       { path: '/practice', element: <PracticeRoute />, handle: page('/practice') },
       { path: '/t/*', element: <TicketRoute />, handle: page('/t/*') },
+      { path: '/story/*', element: <StoryRoute />, handle: page('/story/*') },
       { path: '/start', element: <StartRoute />, handle: page('/start') },
       { path: '/start/install', element: <StartStepRoute id="o2" />, handle: page('/start/install') },
       { path: '/start/doctor', element: <StartStepRoute id="o3" />, handle: page('/start/doctor') },
