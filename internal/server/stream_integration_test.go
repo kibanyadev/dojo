@@ -203,6 +203,9 @@ func TestStreamReadyProgressHeartbeat(t *testing.T) {
 	if json.Unmarshal([]byte(ev.data), &m) != nil || m["check_count"] != float64(1) || m["last_check_ok"] != false || strings.Contains(ev.data, "SECRET") {
 		t.Fatalf("progress after check: %s", ev.data)
 	}
+	if ib := s.next("inbox", 5*time.Second); ib.data != "{}" {
+		t.Fatalf("inbox after check: %q", ib.data)
+	}
 	if hb := s.next("heartbeat", 5*time.Second); !strings.HasPrefix(hb.data, `{"at":"20`) {
 		t.Fatalf("heartbeat: %q", hb.data)
 	}

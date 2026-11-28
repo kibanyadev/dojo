@@ -9,6 +9,8 @@ services:
       STREAM_HEARTBEAT_SECONDS: "1"
       # The commit verifier ticks every second, so its tests wait seconds, not minutes.
       DOJO_COMMIT_VERIFY_INTERVAL_SECONDS: "1"
+      # No flag cache, so a test that flips ai_reviews_enabled sees it at once (production caches 30 s).
+      DOJO_FLAG_CACHE_SECONDS: "0"
   fake-github:
     environment:
       # A short poll interval keeps the device-flow smoke test fast.
