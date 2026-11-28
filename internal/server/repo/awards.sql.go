@@ -142,6 +142,48 @@ func (q *Queries) IsMarkHeld(ctx context.Context, arg IsMarkHeldParams) (bool, e
 	return held, err
 }
 
+const listLearnerBeltMarks = `-- name: ListLearnerBeltMarks :many
+SELECT m.slug, m.belt, m.title, m.summary, a.awarded_at
+FROM belt_marks m
+LEFT JOIN belt_awards a ON a.mark_id = m.id AND a.learner_id = $1
+ORDER BY array_position(ARRAY['white', 'yellow', 'orange', 'green', 'blue', 'brown', 'black'], m.belt), m.position
+`
+
+type ListLearnerBeltMarksRow struct {
+	Slug      string
+	Belt      string
+	Title     string
+	Summary   string
+	AwardedAt pgtype.Timestamptz
+}
+
+// Every mark in belt order then place, with the time this learner earned it (null when not held).
+func (q *Queries) ListLearnerBeltMarks(ctx context.Context, learnerID pgtype.UUID) ([]ListLearnerBeltMarksRow, error) {
+	rows, err := q.db.Query(ctx, listLearnerBeltMarks, learnerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLearnerBeltMarksRow
+	for rows.Next() {
+		var i ListLearnerBeltMarksRow
+		if err := rows.Scan(
+			&i.Slug,
+			&i.Belt,
+			&i.Title,
+			&i.Summary,
+			&i.AwardedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setCelebrateURL = `-- name: SetCelebrateURL :exec
 UPDATE inbox_items SET url = '/celebrate/' || id::text WHERE id = $1 AND learner_id = $2
 `

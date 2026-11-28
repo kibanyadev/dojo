@@ -23,6 +23,7 @@ type CatalogStore interface {
 	ListCatalogItems(ctx context.Context) ([]repo.ListCatalogItemsRow, error)
 	ListCatalogMarks(ctx context.Context) ([]repo.ListCatalogMarksRow, error)
 	ListPracticeItems(ctx context.Context) ([]repo.ListPracticeItemsRow, error)
+	ListLearnerBeltMarks(ctx context.Context, learnerID pgtype.UUID) ([]repo.ListLearnerBeltMarksRow, error)
 	ListLearnerTicketStates(ctx context.Context, learnerID pgtype.UUID) ([]repo.ListLearnerTicketStatesRow, error)
 	ListLearnerCompletedItems(ctx context.Context, learnerID pgtype.UUID) ([]string, error)
 	ListLearnerActivityDays(ctx context.Context, arg repo.ListLearnerActivityDaysParams) ([]repo.ListLearnerActivityDaysRow, error)
