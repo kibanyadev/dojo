@@ -15,6 +15,7 @@ import { PracticePage } from './pages/Practice';
 import { SignInPage } from './pages/SignIn';
 import { TicketPage } from './pages/Ticket';
 import { StoryPage } from './pages/Story';
+import { QuizPage } from './pages/Quiz';
 
 function Loading() {
   return (
@@ -150,6 +151,15 @@ export function StoryRoute() {
   if (me.isError) return <MeFailed error={me.error} retry={() => void me.refetch()} />;
   if (me.data === null) return <Navigate to="/signin" replace />;
   return <StoryPage me={me.data} />;
+}
+
+// /app/quiz/<role>/<quiz>: same guard as /app.
+export function QuizRoute() {
+  const me = useMe();
+  if (me.isPending) return <Loading />;
+  if (me.isError) return <MeFailed error={me.error} retry={() => void me.refetch()} />;
+  if (me.data === null) return <Navigate to="/signin" replace />;
+  return <QuizPage me={me.data} />;
 }
 
 // /app/signin: a signed-in browser has nothing to do here.

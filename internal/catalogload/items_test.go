@@ -59,7 +59,7 @@ func TestItemRowsEveryKind(t *testing.T) {
 }
 
 func TestDropAndKindChecksCoverEveryLearnerTable(t *testing.T) {
-	for _, tbl := range []string{"ticket_progress", "hint_opens", "item_completions", "quiz_answers", "story_choices"} {
+	for _, tbl := range []string{"ticket_progress", "hint_opens", "item_completions", "quiz_answers", "story_choices", "written_work"} {
 		if !contains(learnerTables, tbl) {
 			t.Errorf("learnerTables misses %s", tbl)
 		}

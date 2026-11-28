@@ -52,7 +52,23 @@ type fakeItems struct {
 	done    bool
 	answers []repo.ListQuizAnswersRow
 	choice  *repo.GetStoryChoiceRow
+	work    *repo.GetWrittenWorkRow
+	flag    string // ai_reviews_enabled as stored; "" is true
 	err     error
+}
+
+func (f *fakeItems) GetWrittenWork(context.Context, repo.GetWrittenWorkParams) (repo.GetWrittenWorkRow, error) {
+	if f.work == nil {
+		return repo.GetWrittenWorkRow{}, pgx.ErrNoRows
+	}
+	return *f.work, nil
+}
+
+func (f *fakeItems) GetSystemFlag(context.Context, string) ([]byte, error) {
+	if f.flag == "" {
+		return []byte("true"), nil
+	}
+	return []byte(f.flag), nil
 }
 
 func (f *fakeItems) GetItemView(_ context.Context, id string) (repo.GetItemViewRow, error) {

@@ -284,6 +284,91 @@ export function fetchTicket(id: string): Promise<Ticket> {
   return getJSON<Ticket>(`/v1/tickets/${escaped}`);
 }
 
+/** Per-question state of a quiz (technical-design 3.10); null until the question is answered. */
+export interface AnswerState {
+  first_choice: number;
+  first_correct: boolean;
+  last_choice: number;
+  last_correct: boolean;
+  answer: number;
+  notes: string[];
+  explain: string | null;
+}
+
+export interface QuizQuestion {
+  id: string;
+  text: string;
+  /** Texts only, inline markdown. */
+  choices: string[];
+  answer_state: AnswerState | null;
+}
+
+/** GET /v1/items/{id} for a quiz. Other kinds share the head and are not drawn by L11. */
+export interface QuizItem {
+  id: string;
+  kind: 'quiz';
+  role: string | null;
+  title: string;
+  est_minutes: number;
+  tags: string[];
+  done: boolean;
+  answered: number;
+  total: number;
+  first_try_correct: number;
+  questions: QuizQuestion[];
+}
+
+export interface OtherItem {
+  id: string;
+  kind: 'writing' | 'story' | 'feedback';
+}
+
+export type Item = QuizItem | OtherItem;
+
+const escapeId = (id: string) => id.split('/').map(encodeURIComponent).join('/');
+
+export const fetchItem = (id: string) => getJSON<Item>(`/v1/items/${escapeId(id)}`);
+
+/** The 200 of POST /v1/items/{id}/answers. */
+export interface AnswerResult {
+  correct: boolean;
+  answer: number;
+  notes: string[];
+  explain: string | null;
+  done: boolean;
+  answered: number;
+  total: number;
+  first_try_correct: number;
+}
+
+export type AnswerOutcome = { ok: true; result: AnswerResult } | { ok: false; reason: ReadFailure; retryAfterMs?: number };
+
+/** POST /v1/items/{id}/answers: the server checks the choice; a wrong answer is still a 200. */
+export async function postAnswer(id: string, question: string, choice: number): Promise<AnswerOutcome> {
+  let res: Response;
+  try {
+    res = await apiFetch(`/v1/items/${escapeId(id)}/answers`, { method: 'POST', body: JSON.stringify({ question, choice }) });
+  } catch {
+    return { ok: false, reason: 'failed' };
+  }
+  if (res.ok) {
+    try {
+      return { ok: true, result: (await res.json()) as AnswerResult };
+    } catch {
+      return { ok: false, reason: 'failed' };
+    }
+  }
+  if (res.status === 401) return { ok: false, reason: 'signed_out' };
+  if (res.status === 404) return { ok: false, reason: 'not_found' };
+  if (res.status === 429) {
+    const wait = retryAfterMs(res);
+    blockedUntil = Math.max(blockedUntil, Date.now() + wait);
+    return { ok: false, reason: 'rate_limited', retryAfterMs: wait };
+  }
+  if (res.status === 403 && (await errorCode(res)) === 'account_suspended') return { ok: false, reason: 'suspended' };
+  return { ok: false, reason: 'failed' };
+}
+
 export interface Hint {
   n: number;
   text: string;
@@ -326,6 +411,8 @@ export const ACTIVITY_KEY = ['activity'] as const;
 export const PRACTICE_KEY = ['practice'] as const;
 export const ticketKey = (id: string) => ['ticket', id] as const;
 export const TICKET_KEY_PREFIX = ['ticket'] as const;
+export const itemKey = (id: string) => ['item', id] as const;
+export const ITEM_KEY_PREFIX = ['item'] as const;
 
 // Data is current until the stream or the poll says otherwise; retry only a transient failure.
 const retry = (count: number, err: Error) => !(err instanceof ReadError && err.reason !== 'failed') && count < 1;
@@ -336,4 +423,5 @@ export const useToday = () => useQuery({ queryKey: TODAY_KEY, queryFn: fetchToda
 export const usePractice = () => useQuery({ queryKey: PRACTICE_KEY, queryFn: fetchPractice, retry, staleTime: Infinity });
 export const useTicket = (id: string) =>
   useQuery({ queryKey: ticketKey(id), queryFn: () => fetchTicket(id), retry, staleTime: Infinity });
+export const useItem = (id: string) => useQuery({ queryKey: itemKey(id), queryFn: () => fetchItem(id), retry, staleTime: Infinity });
 export const useActivity = () => useQuery({ queryKey: ACTIVITY_KEY, queryFn: fetchActivity, retry, staleTime: Infinity });

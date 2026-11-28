@@ -43,6 +43,9 @@ updates:
     ignore:
       - dependency-name: typescript
         update-types: ['version-update:semver-major']
+      # @types/node majors follow the Node runtime in the Dockerfile.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
     groups:
       npm-web:
         patterns:
@@ -60,6 +63,9 @@ updates:
     # TypeScript majors need their own migration (TS 7 broke the build).
     ignore:
       - dependency-name: typescript
+        update-types: ['version-update:semver-major']
+      # @types/node majors follow the Node runtime in the Dockerfile.
+      - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
     groups:
       npm-app:
