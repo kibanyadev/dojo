@@ -93,6 +93,20 @@ export function buildHeatGrid(to: string, days: { day: string; count: number }[]
   return { weeks, total, busiest };
 }
 
+/** Labels of the non-ticket kinds, as the canvas names them (W5, L1 Today). */
+export const BETWEEN_LABEL: Record<'writing' | 'quiz' | 'story' | 'feedback', string> = {
+  writing: 'Writing',
+  quiz: 'Quiz',
+  story: 'Story',
+  feedback: 'Feedback',
+};
+
+/** Item pages of design 3.10: L9 `/w/*id`, L11 `/quiz/*id`, L4 `/story/*id` (also the feedback round). */
+export function itemHref(kind: keyof typeof BETWEEN_LABEL, id: string): string {
+  const prefix = kind === 'writing' ? 'w' : kind === 'quiz' ? 'quiz' : 'story';
+  return `/${prefix}/${id.split('/').map(encodeURIComponent).join('/')}`;
+}
+
 const DAY_LABEL = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
 /** The text alternative for the grid. */
