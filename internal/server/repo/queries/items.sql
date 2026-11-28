@@ -31,3 +31,9 @@ RETURNING item_id;
 
 -- name: GetStoryChoice :one
 SELECT choice_id, chosen_at FROM story_choices WHERE learner_id = $1 AND item_id = $2;
+
+-- POST /v1/items/{id}/choice: the choice is final (no UPDATE grant). Run under the learner's class-1 lock.
+-- name: InsertStoryChoice :one
+INSERT INTO story_choices (org_id, learner_id, item_id, choice_id)
+VALUES (@org_id, @learner_id, @item_id, @choice_id)
+RETURNING chosen_at;

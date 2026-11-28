@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	// ErrItemNotFound means no quiz item has that id.
+	// ErrItemNotFound means no item of the route's kind (quiz or story) has that id.
 	ErrItemNotFound = errors.New("item not found")
 	// ErrQuestionNotFound means the quiz does not list that question.
 	ErrQuestionNotFound = errors.New("question not found")
