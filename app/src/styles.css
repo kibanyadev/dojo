@@ -5,6 +5,9 @@
 
 @theme {
   --color-ctl: #7a7f8c;
+  /* Story sender avatar (Today message, inbox story rows). */
+  --color-storybg: #e9dccb;
+  --color-storyink: #5a3e1e;
   /* Activity heat ramp, from the Today board. */
   /* Terminal block, from the L3 boards: always dark. */
   --color-term: #121419;

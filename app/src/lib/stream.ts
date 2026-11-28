@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { INBOX_KEY } from './inbox';
 import type { CheckStatus } from './onboarding';
 import { ACTIVITY_KEY, ITEM_KEY_PREFIX, itemKey, PATH_KEY, PRACTICE_KEY, readBlockedUntil, ticketKey, TICKET_KEY_PREFIX, TODAY_KEY, type Ticket, type TicketState } from './read';
 
@@ -48,6 +49,8 @@ export interface StreamHandlers {
   onLogin?: (event: LoginEvent) => void;
   onDoctor?: (event: DoctorEvent) => void;
   onItem?: (event: ItemEvent) => void;
+  /** The `inbox` event (3.10): the unread count may have changed; it carries no data. */
+  onInbox?: () => void;
 }
 
 /** Opens GET /v1/stream; returns a close function. Reconnect, idle and polling rules: technical-design 3.8. */
@@ -119,6 +122,7 @@ export function openStream(h: StreamHandlers, url: string = STREAM_URL): () => v
     listen('login', h.onLogin);
     listen('doctor', h.onDoctor);
     listen('item', h.onItem);
+    listen('inbox', h.onInbox && (() => h.onInbox?.()));
     es.onerror = () => {
       startPoll();
       // CLOSED means a refused connect (429, 401): EventSource will not retry, so the page does after 30 s.
@@ -202,8 +206,9 @@ function makeLive(client: QueryClient): Live {
     clearTimeout(live.timer);
     live.timer = setTimeout(fire, Math.max(ms, readBlockedUntil() - Date.now(), 0));
   };
-  const all = [PATH_KEY, TODAY_KEY, ACTIVITY_KEY, PRACTICE_KEY, TICKET_KEY_PREFIX, ITEM_KEY_PREFIX];
+  const all = [PATH_KEY, TODAY_KEY, ACTIVITY_KEY, PRACTICE_KEY, TICKET_KEY_PREFIX, ITEM_KEY_PREFIX, INBOX_KEY];
   live.handlers = {
+    onInbox: () => schedule([INBOX_KEY], PROGRESS_DEBOUNCE_MS),
     // A completion changes what Today offers next and what Path marks done, so both refetch with the item.
     onItem: (e) => schedule([TODAY_KEY, PATH_KEY, itemKey(e.item_id)], PROGRESS_DEBOUNCE_MS),
     onSync: () => schedule(all, 0),
@@ -229,6 +234,7 @@ function subscribe(client: QueryClient): () => void {
     onPoll: () => lives.forEach((l) => l.handlers.onPoll()),
     onProgress: (e) => lives.forEach((l) => l.handlers.onProgress(e)),
     onItem: (e) => lives.forEach((l) => l.handlers.onItem?.(e)),
+    onInbox: () => lives.forEach((l) => l.handlers.onInbox?.()),
   });
   const mine = live;
   return () => {

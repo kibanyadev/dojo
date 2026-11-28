@@ -239,8 +239,7 @@ function Message({ brief }: { brief: BriefMessage }) {
     <section aria-label={`Message from ${brief.sender}`} className={`${card} gap-2.5 p-[18px]`}>
       <div className="flex items-center gap-2.5">
         <span
-          className="inline-flex size-[34px] flex-none items-center justify-center rounded-full font-bold"
-          style={{ background: '#E9DCCB', color: '#5A3E1E' }}
+          className="inline-flex size-[34px] flex-none items-center justify-center rounded-full bg-storybg font-bold text-storyink"
           aria-hidden="true"
         >
           {initial(brief.sender)}

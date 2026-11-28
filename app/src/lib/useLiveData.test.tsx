@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ACTIVITY_KEY, fetchToday, itemKey, PATH_KEY, PRACTICE_KEY, resetReadBlock, TODAY_KEY, ticketKey, type Ticket } from './read';
+import { INBOX_KEY } from './inbox';
 import { PROGRESS_DEBOUNCE_MS, useLiveData } from './stream';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -136,7 +137,7 @@ describe('useLiveData', () => {
       sources[0]!.emit('ready');
       vi.advanceTimersByTime(0);
     });
-    expect(invalidate.mock.calls.map((c) => c[0]?.queryKey)).toEqual([PATH_KEY, TODAY_KEY, ACTIVITY_KEY, PRACTICE_KEY, ['ticket'], ['item']]);
+    expect(invalidate.mock.calls.map((c) => c[0]?.queryKey)).toEqual([PATH_KEY, TODAY_KEY, ACTIVITY_KEY, PRACTICE_KEY, ['ticket'], ['item'], INBOX_KEY]);
   });
 
   it('refetches today, path and that item when an item completes', async () => {
@@ -146,6 +147,19 @@ describe('useLiveData', () => {
       vi.advanceTimersByTime(PROGRESS_DEBOUNCE_MS);
     });
     expect(invalidate.mock.calls.map((c) => c[0]?.queryKey)).toEqual([TODAY_KEY, PATH_KEY, itemKey('support-l1/quiz-02')]);
+  });
+
+  it('refetches the inbox queries once for a burst of inbox events, 500 ms later', async () => {
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    await act(async () => {
+      sources[0]!.emit('inbox', '{}');
+      sources[0]!.emit('inbox', '{}');
+    });
+    expect(invalidate).not.toHaveBeenCalled();
+    await act(async () => {
+      vi.advanceTimersByTime(PROGRESS_DEBOUNCE_MS);
+    });
+    expect(invalidate.mock.calls.map((c) => c[0]?.queryKey)).toEqual([INBOX_KEY]);
   });
 
   it('ignores a malformed item event', async () => {
