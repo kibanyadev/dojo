@@ -21,6 +21,25 @@ ON CONFLICT (learner_id, item_id) DO UPDATE
 SET draft = EXCLUDED.draft, draft_saved_at = now(), updated_at = now()
 RETURNING draft_saved_at;
 
+-- POST /v1/items/{id}/submit: the work, written under the learner's class-1 lock. The body also becomes
+-- the draft; first_submitted_at keeps its first value; the last finished review stays until a new one
+-- lands; tries start over. @state is pending or capped.
+-- name: SubmitWork :exec
+INSERT INTO written_work (org_id, learner_id, item_id, draft, draft_saved_at, body, first_submitted_at, submitted_at,
+                          submit_count, review_state, review_next_at)
+VALUES (@org_id, @learner_id, @item_id, @body::text, now(), @body::text, now(), now(), 1, @state::text, now())
+ON CONFLICT (learner_id, item_id) DO UPDATE
+SET draft = EXCLUDED.draft, draft_saved_at = now(), body = EXCLUDED.body,
+    first_submitted_at = COALESCE(written_work.first_submitted_at, EXCLUDED.first_submitted_at),
+    submitted_at = now(), submit_count = written_work.submit_count + 1, review_state = EXCLUDED.review_state,
+    review_tries = 0, review_next_at = now(), updated_at = now();
+
+-- The hidden daily cap: this learner's review calls of the current UTC day that reached the model.
+-- name: CountReviewCallsToday :one
+SELECT count(*) FROM ai_reviews
+WHERE learner_id = $1 AND outcome IN ('ok', 'invalid')
+  AND created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC';
+
 -- name: GetSystemFlag :one
 SELECT value FROM system_flags WHERE key = $1;
 

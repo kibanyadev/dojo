@@ -86,6 +86,10 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
+	flagTTL, err := server.ParseFlagCacheTTL(os.Getenv("DOJO_FLAG_CACHE_SECONDS"))
+	if err != nil {
+		return err
+	}
 	hub := server.NewHub(store.ListenConn)
 	go hub.Run(ctx)
 	go server.RunExpiry(ctx, store, server.ExpiryInterval)
@@ -103,7 +107,7 @@ func run(args []string) error {
 	auth := server.Auth{Store: store.Queries(), Catalog: store.Queries(),
 		Bundles: &server.Bundles{Store: store.Queries(), Signer: objects}, Secure: secure, Events: store,
 		Stream: hub, StreamHeartbeat: heartbeat,
-		Tickets: &server.Tickets{Reader: store.Queries(), Opener: store}, Items: &server.Items{Reader: store.Queries(), Answerer: store, Chooser: store, Drafter: store}, Reports: store,
+		Tickets: &server.Tickets{Reader: store.Queries(), Opener: store}, Items: &server.Items{Reader: store.Queries(), Answerer: store, Chooser: store, Drafter: store, Submitter: store, FlagTTL: flagTTL}, Reports: store,
 		Onboarding: &server.Onboarding{Facts: store.Queries(), Doctor: store, Confirmer: store,
 			Env: os.Getenv("DOJO_ENV"), PublicOrigin: strings.TrimRight(os.Getenv("PUBLIC_ORIGIN"), "/")}}
 	cli := &server.CLILogin{GitHub: gh, Store: store.Queries(), Tokens: store}
