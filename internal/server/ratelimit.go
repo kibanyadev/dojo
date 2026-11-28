@@ -191,7 +191,7 @@ func (rl *RateLimits) wrap(mux *http.ServeMux, next http.Handler) http.Handler {
 			bundleKey = "learner:" + p.learner.String()
 		}
 		var betweenKey string
-		if p, authed := principalOf(r.Context()); authed && rl.Between != nil && pattern == "POST "+itemsPrefix && isItemWrite(r) {
+		if p, authed := principalOf(r.Context()); authed && rl.Between != nil && (pattern == "POST "+itemsPrefix || pattern == "PUT "+itemsPrefix) && isItemWrite(r) {
 			betweenKey = "learner:" + p.learner.String()
 		}
 		isStart := pattern == "POST "+startPath && r.URL.Path == startPath

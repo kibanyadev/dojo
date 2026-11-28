@@ -8,3 +8,5 @@ SELECT prune_events() AS events_deleted \gset
 \echo prune: events deleted :events_deleted
 SELECT prune_pending_commits() AS pending_commits_deleted \gset
 \echo prune: pending_commits deleted :pending_commits_deleted
+SELECT prune_ai_reviews() AS ai_reviews_deleted \gset
+\echo prune: ai_reviews deleted :ai_reviews_deleted

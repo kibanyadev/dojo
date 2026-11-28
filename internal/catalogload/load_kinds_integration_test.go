@@ -185,6 +185,8 @@ func TestKindChangeRefusedWithAnswerRows(t *testing.T) {
 			"SELECT org_id, id, 'support-l1/quiz-01', 'q1', 0, true, 0, true FROM learners WHERE github_id = 9101",
 		"story_choices": "INSERT INTO story_choices (org_id, learner_id, item_id, choice_id) " +
 			"SELECT org_id, id, 'support-l1/quiz-01', 'c1' FROM learners WHERE github_id = 9101",
+		"written_work": "INSERT INTO written_work (org_id, learner_id, item_id, draft) " +
+			"SELECT org_id, id, 'support-l1/quiz-01', 'wip' FROM learners WHERE github_id = 9101",
 	} {
 		t.Run(name, func(t *testing.T) {
 			wipe(t)
