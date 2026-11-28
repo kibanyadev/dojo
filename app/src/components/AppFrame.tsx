@@ -2,7 +2,9 @@ import { useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router';
 import { Logo } from './Logo';
+import { NotificationsBell } from './NotificationsBell';
 import { TabBar, TopNav } from './PrimaryNav';
+import { useLiveData } from '../lib/stream';
 import { apiFetch } from '../lib/api';
 import type { Me } from '../lib/me';
 
@@ -18,6 +20,8 @@ export function AppFrame({ me, children }: { me: Me; children: ReactNode }) {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  // The bell and the Inbox tab badge stay live on every signed-in page.
+  useLiveData();
 
   async function onSignOut() {
     setBusy(true);
@@ -44,6 +48,7 @@ export function AppFrame({ me, children }: { me: Me; children: ReactNode }) {
             <TopNav />
           </div>
           <div className="flex items-center gap-2.5">
+            <NotificationsBell />
             <button
               type="button"
               onClick={onSignOut}

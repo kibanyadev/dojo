@@ -15,6 +15,7 @@ import { PracticePage } from './pages/Practice';
 import { SignInPage } from './pages/SignIn';
 import { TicketPage } from './pages/Ticket';
 import { QuizPage } from './pages/Quiz';
+import { InboxPage } from './pages/Inbox';
 
 function Loading() {
   return (
@@ -132,6 +133,15 @@ export function PracticeRoute() {
   if (me.isError) return <MeFailed error={me.error} retry={() => void me.refetch()} />;
   if (me.data === null) return <Navigate to="/signin" replace />;
   return <PracticePage me={me.data} />;
+}
+
+// /app/inbox (N1, phone tab): same guard as /app.
+export function InboxRoute() {
+  const me = useMe();
+  if (me.isPending) return <Loading />;
+  if (me.isError) return <MeFailed error={me.error} retry={() => void me.refetch()} />;
+  if (me.data === null) return <Navigate to="/signin" replace />;
+  return <InboxPage me={me.data} />;
 }
 
 // /app/t/<role>/<ticket>: same guard as /app.

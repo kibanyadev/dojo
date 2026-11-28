@@ -226,7 +226,7 @@ function retryAfterMs(res: Response): number {
   return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) * 1000 : 1000;
 }
 
-async function getJSON<T>(path: string): Promise<T> {
+export async function getJSON<T>(path: string): Promise<T> {
   for (let wait = blockedUntil - Date.now(); wait > 0; wait = blockedUntil - Date.now()) {
     await new Promise((resolve) => setTimeout(resolve, wait));
   }
@@ -410,7 +410,7 @@ export const itemKey = (id: string) => ['item', id] as const;
 export const ITEM_KEY_PREFIX = ['item'] as const;
 
 // Data is current until the stream or the poll says otherwise; retry only a transient failure.
-const retry = (count: number, err: Error) => !(err instanceof ReadError && err.reason !== 'failed') && count < 1;
+export const retry = (count: number, err: Error) => !(err instanceof ReadError && err.reason !== 'failed') && count < 1;
 
 export const useCatalog = () => useQuery({ queryKey: CATALOG_KEY, queryFn: fetchCatalog, retry, staleTime: 5 * 60_000 });
 export const usePath = () => useQuery({ queryKey: PATH_KEY, queryFn: fetchPath, retry, staleTime: Infinity });
