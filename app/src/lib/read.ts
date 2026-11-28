@@ -57,6 +57,26 @@ export interface PathItem {
   lab_state: LabState | null;
 }
 
+export type BetweenKind = 'writing' | 'quiz' | 'story' | 'feedback';
+
+/** A non-ticket item of a role in GET /v1/path (design 3.10). */
+export interface BetweenItem {
+  id: string;
+  kind: BetweenKind;
+  title: string;
+  order: number;
+  done: boolean;
+}
+
+/** The item GET /v1/today offers between tickets (design 3.10). */
+export interface TodayBetween {
+  id: string;
+  kind: BetweenKind;
+  role: string;
+  title: string;
+  est_minutes: number;
+}
+
 export interface PathRole {
   slug: string;
   title: string;
@@ -66,6 +86,7 @@ export interface PathRole {
   tickets_passed: number;
   tickets_total: number;
   items: PathItem[];
+  between_items?: BetweenItem[];
 }
 
 export interface LearnerPath {
@@ -95,6 +116,7 @@ export interface Today {
   next: TodayTicket | null;
   role: { slug: string; title: string; tickets_passed: number; tickets_total: number } | null;
   all_passed: boolean;
+  between?: TodayBetween | null;
 }
 
 export interface TicketProgress {
