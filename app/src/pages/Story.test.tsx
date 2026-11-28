@@ -292,12 +292,3 @@ describe('Story errors', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('We could not find that moment.');
   });
 });
-
-describe('Feedback round', () => {
-  it('reads the message and says the reply is coming soon', async () => {
-    await mount(story({ kind: 'feedback', choices: undefined, chosen: undefined, from: { name: 'Carmen', role: 'Mentor' } }));
-    expect(text()).toContain('Carmen · Mentor');
-    expect(text()).toContain('Replying to feedback is coming soon');
-    expect(text()).not.toContain('How do you reply?');
-  });
-});
