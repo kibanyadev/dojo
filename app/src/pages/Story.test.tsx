@@ -5,8 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { routes } from '../routes';
-import { readBlockedUntil, resetReadBlock } from '../lib/read';
-import type { StoryChosen, StoryItem } from '../lib/story';
+import { readBlockedUntil, resetReadBlock, type StoryChosen, type StoryItem } from '../lib/read';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -165,6 +164,20 @@ describe('Story not chosen yet', () => {
     expect(posts).toHaveLength(1);
   });
 
+  it('sends one POST when a second reply is clicked while the first is pending', async () => {
+    let release: (r: Response) => void = () => {};
+    const gate = new Promise<Response>((resolve) => (release = resolve));
+    const inner = (globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>).bind(globalThis);
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => (init?.method === 'POST' ? (posts.push({ url, body: String(init.body) }), gate) : inner(url, init)));
+    await act(async () => reply("I'll fix").dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await act(async () => reply('Ask Lucía').dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(posts).toHaveLength(1);
+    await act(async () => release(Response.json({ chosen: CHOSEN })));
+    await settle();
+    expect(posts).toHaveLength(1);
+    expect(live()!.textContent).toContain('good reply');
+  });
+
   it('is operable from the keyboard: replies are buttons', () => {
     for (const b of container.querySelectorAll('[role="group"] button')) expect(b.getAttribute('type')).toBe('button');
   });
@@ -196,6 +209,33 @@ describe('Story errors', () => {
     expect(text()).toContain('It works out, slowly.');
     expect(reply('Ask Lucía').getAttribute('aria-pressed')).toBe('true');
     expect(reply("I'll fix").getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('keeps the replies locked after a 409 until the refetch settles', async () => {
+    await mount(story());
+    let release: (r: Response) => void = () => {};
+    const slow = new Promise<Response>((resolve) => (release = resolve));
+    const inner = (globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>).bind(globalThis);
+    let gets = 0;
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        posts.push({ url, body: String(init.body) });
+        return Promise.resolve(Response.json({ error: 'already_chosen' }, { status: 409 }));
+      }
+      if (url === `/v1/items/${ID}` && ++gets === 1) return slow;
+      return inner(url, init);
+    });
+    await act(async () => reply("I'll fix").dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await settle();
+    expect(gets).toBe(1);
+    expect(reply('Ask Lucía').getAttribute('aria-disabled')).toBe('true');
+    await act(async () => reply('Ask Lucía').dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(posts).toHaveLength(1);
+    current = story({ done: true, chosen: { ...CHOSEN, id: 'pass', verdict: 'okay', reaction: 'It works out, slowly.' } });
+    await act(async () => release(Response.json(current)));
+    await settle();
+    expect(reply('Ask Lucía').getAttribute('aria-pressed')).toBe('true');
+    expect(text()).toContain('It works out, slowly.');
   });
 
   it('says a reply is gone on 404 and refetches', async () => {
@@ -243,7 +283,7 @@ describe('Story errors', () => {
   });
 
   it('treats a non-story item as not found', async () => {
-    await mount(story({ kind: 'quiz' }));
+    await mount({ ...story(), kind: 'quiz' } as unknown as StoryItem);
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('We could not find that moment.');
   });
 

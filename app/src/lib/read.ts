@@ -221,17 +221,12 @@ export function resetReadBlock(): void {
   blockedUntil = 0;
 }
 
-export function retryAfterMs(res: Response): number {
+function retryAfterMs(res: Response): number {
   const seconds = Number(res.headers.get('Retry-After'));
   return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) * 1000 : 1000;
 }
 
-/** A 429 on a write holds back every read until Retry-After, like a 429 on a read. */
-export function noteRateLimit(waitMs: number): void {
-  blockedUntil = Math.max(blockedUntil, Date.now() + waitMs);
-}
-
-export async function getJSON<T>(path: string): Promise<T> {
+async function getJSON<T>(path: string): Promise<T> {
   for (let wait = blockedUntil - Date.now(); wait > 0; wait = blockedUntil - Date.now()) {
     await new Promise((resolve) => setTimeout(resolve, wait));
   }
@@ -318,12 +313,41 @@ export interface QuizItem {
   questions: QuizQuestion[];
 }
 
-export interface OtherItem {
+export type Verdict = 'good' | 'okay' | 'poor';
+
+export interface StoryChoice {
   id: string;
-  kind: 'writing' | 'story' | 'feedback';
+  text: string;
 }
 
-export type Item = QuizItem | OtherItem;
+export interface StoryChosen {
+  id: string;
+  verdict: Verdict;
+  reaction: string;
+  chosen_at: string;
+}
+
+/** GET /v1/items/{id} for a story or feedback item (design 3.10). Feedback has no `choices` or `chosen`. */
+export interface StoryItem {
+  id: string;
+  kind: 'story' | 'feedback';
+  role: string | null;
+  title: string;
+  est_minutes: number;
+  tags: string[];
+  done: boolean;
+  from?: { name: string; role: string };
+  scene?: string;
+  choices?: StoryChoice[];
+  chosen?: StoryChosen | null;
+}
+
+export interface OtherItem {
+  id: string;
+  kind: 'writing';
+}
+
+export type Item = QuizItem | StoryItem | OtherItem;
 
 const escapeId = (id: string) => id.split('/').map(encodeURIComponent).join('/');
 
@@ -365,6 +389,38 @@ export async function postAnswer(id: string, question: string, choice: number): 
     blockedUntil = Math.max(blockedUntil, Date.now() + wait);
     return { ok: false, reason: 'rate_limited', retryAfterMs: wait };
   }
+  if (res.status === 403 && (await errorCode(res)) === 'account_suspended') return { ok: false, reason: 'suspended' };
+  return { ok: false, reason: 'failed' };
+}
+
+export type ChooseResult =
+  | { ok: true; chosen: StoryChosen }
+  | { ok: false; reason: 'already_chosen' | 'bad_choice' | ReadFailure; retryAfterMs?: number };
+
+/** POST /v1/items/{id}/choice. The choice is final: a repeat of the same id is a 200, another one a 409. */
+export async function chooseReply(id: string, choice: string): Promise<ChooseResult> {
+  let res: Response;
+  try {
+    res = await apiFetch(`/v1/items/${escapeId(id)}/choice`, { method: 'POST', body: JSON.stringify({ choice }) });
+  } catch {
+    return { ok: false, reason: 'failed' };
+  }
+  if (res.ok) {
+    try {
+      const body = (await res.json()) as { chosen?: StoryChosen };
+      return body.chosen ? { ok: true, chosen: body.chosen } : { ok: false, reason: 'failed' };
+    } catch {
+      return { ok: false, reason: 'failed' };
+    }
+  }
+  if (res.status === 401) return { ok: false, reason: 'signed_out' };
+  if (res.status === 404) return { ok: false, reason: 'bad_choice' };
+  if (res.status === 429) {
+    const wait = retryAfterMs(res);
+    blockedUntil = Math.max(blockedUntil, Date.now() + wait);
+    return { ok: false, reason: 'rate_limited', retryAfterMs: wait };
+  }
+  if (res.status === 409 && (await errorCode(res)) === 'already_chosen') return { ok: false, reason: 'already_chosen' };
   if (res.status === 403 && (await errorCode(res)) === 'account_suspended') return { ok: false, reason: 'suspended' };
   return { ok: false, reason: 'failed' };
 }

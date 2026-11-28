@@ -4,8 +4,22 @@ import { Link, useParams } from 'react-router';
 import { AppFrame } from '../components/AppFrame';
 import { Markdown } from '../lib/markdown';
 import { ME_KEY, type Me } from '../lib/me';
-import { PATH_KEY, READ_MESSAGES, ReadError, TODAY_KEY, usePath, type PathRole, type ReadFailure } from '../lib/read';
-import { chooseReply, itemKey, useItem, type StoryChosen, type StoryItem, type Verdict } from '../lib/story';
+import {
+  chooseReply,
+  itemKey,
+  PATH_KEY,
+  READ_MESSAGES,
+  ReadError,
+  TODAY_KEY,
+  useItem,
+  usePath,
+  type Item,
+  type PathRole,
+  type ReadFailure,
+  type StoryChosen,
+  type StoryItem,
+  type Verdict,
+} from '../lib/read';
 
 const card = 'flex flex-col gap-3 rounded-2xl border border-line bg-surface p-[18px] md:p-5';
 const cardTitle = 'm-0 text-base font-extrabold';
@@ -80,6 +94,7 @@ function Replies({ item }: { item: StoryItem }) {
   const [pending, setPending] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const inFlight = useRef(false);
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const choices = item.choices ?? [];
@@ -87,35 +102,46 @@ function Replies({ item }: { item: StoryItem }) {
   const locked = pending !== null || chosenId !== null;
 
   async function choose(id: string) {
-    if (locked) return;
+    if (inFlight.current || locked) return;
+    inFlight.current = true;
     setPending(id);
     setNotice('');
     const res = await chooseReply(item.id, id);
     if (res.ok) {
-      queryClient.setQueryData<StoryItem>(itemKey(item.id), (t) => (t ? { ...t, done: true, chosen: res.chosen } : t));
+      queryClient.setQueryData<Item>(itemKey(item.id), (t) => (t && t.kind === 'story' ? { ...t, done: true, chosen: res.chosen } : t));
       void queryClient.invalidateQueries({ queryKey: TODAY_KEY });
       void queryClient.invalidateQueries({ queryKey: PATH_KEY });
+      inFlight.current = false;
       setPending(null);
       return;
     }
     if (res.reason === 'rate_limited') {
       setNotice(MESSAGES.rate_limited);
-      timer.current = setTimeout(() => setPending(null), res.retryAfterMs ?? 1000);
+      timer.current = setTimeout(() => {
+        inFlight.current = false;
+        setPending(null);
+      }, res.retryAfterMs ?? 1000);
       return;
     }
+    if (res.reason === 'already_chosen' || res.reason === 'bad_choice') {
+      setNotice(
+        res.reason === 'already_chosen'
+          ? 'You already replied to this message. Showing your reply.'
+          : 'That reply is no longer available. Showing the current ones.',
+      );
+      // Stay locked until the refetch settles, so a stale button cannot post again.
+      try {
+        await queryClient.invalidateQueries({ queryKey: itemKey(item.id) });
+      } finally {
+        inFlight.current = false;
+        setPending(null);
+      }
+      return;
+    }
+    inFlight.current = false;
     setPending(null);
     if (res.reason === 'signed_out') {
       queryClient.setQueryData(ME_KEY, null);
-      return;
-    }
-    if (res.reason === 'already_chosen') {
-      setNotice('You already replied to this message. Showing your reply.');
-      void queryClient.invalidateQueries({ queryKey: itemKey(item.id) });
-      return;
-    }
-    if (res.reason === 'bad_choice') {
-      setNotice('That reply is no longer available. Showing the current ones.');
-      void queryClient.invalidateQueries({ queryKey: itemKey(item.id) });
       return;
     }
     setNotice(res.reason === 'suspended' ? MESSAGES.suspended : 'Could not send your reply. Please try again.');
@@ -265,7 +291,7 @@ function Body({ id }: { id: string }) {
     );
   }
   if (item.isError || (item.data.kind !== 'story' && item.data.kind !== 'feedback')) {
-    const reason = item.isError ? (item.error instanceof ReadError ? item.error.reason : 'failed') : 'not_found';
+    const reason: ReadFailure = item.isError ? (item.error instanceof ReadError ? item.error.reason : 'failed') : 'not_found';
     return (
       <div className="flex flex-col gap-3">
         <PlainTitle />
