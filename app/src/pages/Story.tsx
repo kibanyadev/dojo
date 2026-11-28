@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router';
 import { AppFrame } from '../components/AppFrame';
+import { ReplyEditor } from '../components/ReplyEditor';
 import { Markdown } from '../lib/markdown';
 import { ME_KEY, type Me } from '../lib/me';
 import {
@@ -20,6 +21,7 @@ import {
   type StoryItem,
   type Verdict,
 } from '../lib/read';
+import { useLiveData } from '../lib/stream';
 
 const card = 'flex flex-col gap-3 rounded-2xl border border-line bg-surface p-[18px] md:p-5';
 const cardTitle = 'm-0 text-base font-extrabold';
@@ -245,31 +247,32 @@ function Detail({ item }: { item: StoryItem }) {
         <span className="font-mono text-xs text-muted">{where}</span>
         <Title text={item.title} />
       </div>
-      <div className="flex flex-col gap-3.5 md:grid md:grid-cols-[1fr_380px] md:items-start md:gap-6">
-        <div className="flex min-w-0 flex-col gap-[18px]">
-          <Scene item={item} />
-          {item.kind === 'story' ? (
-            <>
-              <Replies item={item} />
-              <div role="status" aria-live="polite" className="empty:hidden">
-                {item.chosen && <Review chosen={item.chosen} />}
-              </div>
-            </>
-          ) : (
-            <section aria-label="Your reply" className={card}>
-              <h2 className={cardTitle}>Your reply</h2>
-              <p className="m-0 text-sm leading-normal text-fg2">Replying to feedback is coming soon. For now, read the message and come back.</p>
-            </section>
+      {item.kind === 'story' ? (
+        <div className="flex flex-col gap-3.5 md:grid md:grid-cols-[1fr_380px] md:items-start md:gap-6">
+          <div className="flex min-w-0 flex-col gap-[18px]">
+            <Scene item={item} />
+            <Replies item={item} />
+            <div role="status" aria-live="polite" className="empty:hidden">
+              {item.chosen && <Review chosen={item.chosen} />}
+            </div>
+          </div>
+          {role && (
+            <div className="flex min-w-0 flex-col gap-[18px]">
+              <RoleProgress role={role} currentId={item.id} />
+            </div>
           )}
         </div>
-        {role && (
-          <div className="flex min-w-0 flex-col gap-[18px]">
-            <RoleProgress role={role} currentId={item.id} />
-          </div>
-        )}
-      </div>
+      ) : (
+        <Feedback item={item} />
+      )}
     </div>
   );
+}
+
+/** The feedback round: the message from `from`, then the reply box and its review, as the writing page. */
+function Feedback({ item }: { item: StoryItem }) {
+  useLiveData();
+  return <ReplyEditor key={item.id} item={item} lead={<Scene item={item} />} />;
 }
 
 function Body({ id }: { id: string }) {
@@ -315,7 +318,7 @@ function Body({ id }: { id: string }) {
   return <Detail item={item.data} />;
 }
 
-/** L4: one story moment, or a feedback round read-only until its reply page (PR 26). */
+/** L4: one story moment, or a feedback round with its reply box. */
 export function StoryPage({ me }: { me: Me }) {
   const id = useParams()['*'] ?? '';
   return (
