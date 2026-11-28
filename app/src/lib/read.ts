@@ -342,12 +342,51 @@ export interface StoryItem {
   chosen?: StoryChosen | null;
 }
 
-export interface OtherItem {
+export type ReviewState = 'pending' | 'done' | 'capped' | 'failed' | 'paused';
+
+export interface ReviewCriterion {
   id: string;
-  kind: 'writing';
+  text: string;
+  met: boolean;
+  /** A line the learner wrote, quoted by the review. Untrusted text. */
+  evidence: string;
+  note: string;
 }
 
-export type Item = QuizItem | StoryItem | OtherItem;
+export interface Review {
+  criteria: ReviewCriterion[];
+  next_step: string;
+}
+
+/** The learner's `work` on a writing item; null on the item until the first draft or submit. */
+export interface WritingWork {
+  draft: string | null;
+  draft_saved_at: string | null;
+  body: string | null;
+  submitted_at: string | null;
+  submit_count: number;
+  review_state: ReviewState | null;
+  reviewed_at: string | null;
+  /** The last finished review: it stays while a new one is pending. */
+  review: Review | null;
+}
+
+/** GET /v1/items/{id} for a writing item (design 3.10, L9). */
+export interface WritingItem {
+  id: string;
+  kind: 'writing';
+  role: string | null;
+  title: string;
+  est_minutes: number;
+  tags: string[];
+  done: boolean;
+  prompt: string;
+  rubric: { id: string; text: string }[];
+  awards_mark: { slug: string; title: string; held: boolean } | null;
+  work: WritingWork | null;
+}
+
+export type Item = QuizItem | StoryItem | WritingItem;
 
 const escapeId = (id: string) => id.split('/').map(encodeURIComponent).join('/');
 
@@ -423,6 +462,67 @@ export async function chooseReply(id: string, choice: string): Promise<ChooseRes
   if (res.status === 409 && (await errorCode(res)) === 'already_chosen') return { ok: false, reason: 'already_chosen' };
   if (res.status === 403 && (await errorCode(res)) === 'account_suspended') return { ok: false, reason: 'suspended' };
   return { ok: false, reason: 'failed' };
+}
+
+export type WriteFailure = ReadFailure | 'bad_request';
+
+async function writeFailure(res: Response): Promise<{ ok: false; reason: WriteFailure; retryAfterMs?: number }> {
+  if (res.status === 401) return { ok: false, reason: 'signed_out' };
+  if (res.status === 404) return { ok: false, reason: 'not_found' };
+  if (res.status === 400) return { ok: false, reason: 'bad_request' };
+  if (res.status === 429) {
+    const wait = retryAfterMs(res);
+    blockedUntil = Math.max(blockedUntil, Date.now() + wait);
+    return { ok: false, reason: 'rate_limited', retryAfterMs: wait };
+  }
+  if (res.status === 403 && (await errorCode(res)) === 'account_suspended') return { ok: false, reason: 'suspended' };
+  return { ok: false, reason: 'failed' };
+}
+
+export type DraftOutcome = { ok: true; savedAt: string } | { ok: false; reason: WriteFailure; retryAfterMs?: number };
+
+/** PUT /v1/items/{id}/draft: 0 to 4,000 characters; answers the save time. */
+export async function saveDraft(id: string, body: string): Promise<DraftOutcome> {
+  let res: Response;
+  try {
+    res = await apiFetch(`/v1/items/${escapeId(id)}/draft`, { method: 'PUT', body: JSON.stringify({ body }) });
+  } catch {
+    return { ok: false, reason: 'failed' };
+  }
+  if (!res.ok) return writeFailure(res);
+  try {
+    const data = (await res.json()) as { draft_saved_at?: string };
+    return data.draft_saved_at ? { ok: true, savedAt: data.draft_saved_at } : { ok: false, reason: 'failed' };
+  } catch {
+    return { ok: false, reason: 'failed' };
+  }
+}
+
+export interface Awarded {
+  kind: 'mark' | 'belt';
+  inbox_id: string;
+  slug?: string;
+}
+
+export type SubmitOutcome =
+  | { ok: true; item: WritingItem; awarded: Awarded[] }
+  | { ok: false; reason: WriteFailure; retryAfterMs?: number };
+
+/** POST /v1/items/{id}/submit: 1 to 4,000 characters after trimming; answers the item view and the new inbox items. */
+export async function submitWriting(id: string, body: string): Promise<SubmitOutcome> {
+  let res: Response;
+  try {
+    res = await apiFetch(`/v1/items/${escapeId(id)}/submit`, { method: 'POST', body: JSON.stringify({ body }) });
+  } catch {
+    return { ok: false, reason: 'failed' };
+  }
+  if (!res.ok) return writeFailure(res);
+  try {
+    const data = (await res.json()) as { item?: WritingItem; awarded?: Awarded[] };
+    return data.item ? { ok: true, item: data.item, awarded: data.awarded ?? [] } : { ok: false, reason: 'failed' };
+  } catch {
+    return { ok: false, reason: 'failed' };
+  }
 }
 
 export interface Hint {

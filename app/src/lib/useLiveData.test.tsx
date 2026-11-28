@@ -149,6 +149,29 @@ describe('useLiveData', () => {
     expect(invalidate.mock.calls.map((c) => c[0]?.queryKey)).toEqual([TODAY_KEY, PATH_KEY, itemKey('support-l1/quiz-02')]);
   });
 
+  it('refetches that item once for a burst of review events, 500 ms later', async () => {
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    const ev = JSON.stringify({ item_id: 'support-l1/write-01', review_state: 'done' });
+    await act(async () => {
+      sources[0]!.emit('review', ev);
+      sources[0]!.emit('review', ev);
+    });
+    expect(invalidate).not.toHaveBeenCalled();
+    await act(async () => {
+      vi.advanceTimersByTime(PROGRESS_DEBOUNCE_MS);
+    });
+    expect(invalidate.mock.calls.map((c) => c[0]?.queryKey)).toEqual([itemKey('support-l1/write-01')]);
+  });
+
+  it('ignores a malformed review event', async () => {
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    await act(async () => {
+      sources[0]!.emit('review', 'nope');
+      vi.advanceTimersByTime(PROGRESS_DEBOUNCE_MS);
+    });
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
   it('refetches the inbox queries once for a burst of inbox events, 500 ms later', async () => {
     const invalidate = vi.spyOn(client, 'invalidateQueries');
     await act(async () => {
