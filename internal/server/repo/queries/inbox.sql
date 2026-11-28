@@ -42,3 +42,12 @@ SELECT m.slug, m.title, m.summary, m.belt,
        (SELECT count(*) FROM belt_marks b WHERE b.belt = m.belt) AS total
 FROM belt_marks m
 WHERE m.slug = $1;
+
+-- A check item: one row per learner and ticket. Each newer check upserts it, unread again, and queues a push
+-- (design 3.10); updated_at is written only here and by the review upsert.
+-- name: UpsertInboxCheck :exec
+INSERT INTO inbox_items (org_id, learner_id, kind, ref, title, body, url, push_state, push_next_at)
+VALUES (@org_id, @learner_id, 'check', @ref, @title, @body, @url, 'pending', @at)
+ON CONFLICT (learner_id, kind, ref) DO UPDATE
+SET title = EXCLUDED.title, body = EXCLUDED.body, url = EXCLUDED.url, read_at = NULL, updated_at = @at,
+    push_state = 'pending', push_tries = 0, push_next_at = @at, pushed_at = NULL;
