@@ -40,6 +40,12 @@ export interface ItemEvent {
   kind: string;
 }
 
+/** The `review` event (3.10): the state of one item's review changed. */
+export interface ReviewEvent {
+  item_id: string;
+  review_state: string;
+}
+
 export interface StreamHandlers {
   /** `ready` (every open, first included) and `resync`: refetch everything shown. */
   onSync: () => void;
@@ -49,6 +55,8 @@ export interface StreamHandlers {
   onLogin?: (event: LoginEvent) => void;
   onDoctor?: (event: DoctorEvent) => void;
   onItem?: (event: ItemEvent) => void;
+  /** The `review` event (3.10): a review of this item finished or failed. */
+  onReview?: (event: ReviewEvent) => void;
   /** The `inbox` event (3.10): the unread count may have changed; it carries no data. */
   onInbox?: () => void;
 }
@@ -122,6 +130,7 @@ export function openStream(h: StreamHandlers, url: string = STREAM_URL): () => v
     listen('login', h.onLogin);
     listen('doctor', h.onDoctor);
     listen('item', h.onItem);
+    listen('review', h.onReview);
     listen('inbox', h.onInbox && (() => h.onInbox?.()));
     es.onerror = () => {
       startPoll();
@@ -211,6 +220,7 @@ function makeLive(client: QueryClient): Live {
     onInbox: () => schedule([INBOX_KEY], PROGRESS_DEBOUNCE_MS),
     // A completion changes what Today offers next and what Path marks done, so both refetch with the item.
     onItem: (e) => schedule([TODAY_KEY, PATH_KEY, itemKey(e.item_id)], PROGRESS_DEBOUNCE_MS),
+    onReview: (e) => schedule([itemKey(e.item_id)], PROGRESS_DEBOUNCE_MS),
     onSync: () => schedule(all, 0),
     onPoll: () => schedule(all, 0),
     onProgress: (e) => {
@@ -234,6 +244,7 @@ function subscribe(client: QueryClient): () => void {
     onPoll: () => lives.forEach((l) => l.handlers.onPoll()),
     onProgress: (e) => lives.forEach((l) => l.handlers.onProgress(e)),
     onItem: (e) => lives.forEach((l) => l.handlers.onItem?.(e)),
+    onReview: (e) => lives.forEach((l) => l.handlers.onReview?.(e)),
     onInbox: () => lives.forEach((l) => l.handlers.onInbox?.()),
   });
   const mine = live;
