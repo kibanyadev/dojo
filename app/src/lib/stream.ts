@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { CheckStatus } from './onboarding';
-import { ACTIVITY_KEY, PATH_KEY, PRACTICE_KEY, readBlockedUntil, ticketKey, TICKET_KEY_PREFIX, TODAY_KEY, type Ticket, type TicketState } from './read';
+import { ACTIVITY_KEY, ITEM_KEY_PREFIX, itemKey, PATH_KEY, PRACTICE_KEY, readBlockedUntil, ticketKey, TICKET_KEY_PREFIX, TODAY_KEY, type Ticket, type TicketState } from './read';
 
 export const STREAM_URL = '/v1/stream';
 export const POLL_MS = 10_000;
@@ -33,6 +33,12 @@ export interface DoctorEvent {
   checks: { id: string; status: CheckStatus }[];
 }
 
+/** The `item` event (3.10): a non-ticket item was completed, here or on another device. */
+export interface ItemEvent {
+  item_id: string;
+  kind: string;
+}
+
 export interface StreamHandlers {
   /** `ready` (every open, first included) and `resync`: refetch everything shown. */
   onSync: () => void;
@@ -41,6 +47,7 @@ export interface StreamHandlers {
   onPoll: () => void;
   onLogin?: (event: LoginEvent) => void;
   onDoctor?: (event: DoctorEvent) => void;
+  onItem?: (event: ItemEvent) => void;
 }
 
 /** Opens GET /v1/stream; returns a close function. Reconnect, idle and polling rules: technical-design 3.8. */
@@ -111,6 +118,7 @@ export function openStream(h: StreamHandlers, url: string = STREAM_URL): () => v
     };
     listen('login', h.onLogin);
     listen('doctor', h.onDoctor);
+    listen('item', h.onItem);
     es.onerror = () => {
       startPoll();
       // CLOSED means a refused connect (429, 401): EventSource will not retry, so the page does after 30 s.
@@ -194,8 +202,10 @@ function makeLive(client: QueryClient): Live {
     clearTimeout(live.timer);
     live.timer = setTimeout(fire, Math.max(ms, readBlockedUntil() - Date.now(), 0));
   };
-  const all = [PATH_KEY, TODAY_KEY, ACTIVITY_KEY, PRACTICE_KEY, TICKET_KEY_PREFIX];
+  const all = [PATH_KEY, TODAY_KEY, ACTIVITY_KEY, PRACTICE_KEY, TICKET_KEY_PREFIX, ITEM_KEY_PREFIX];
   live.handlers = {
+    // A completion changes what Today offers next and what Path marks done, so both refetch with the item.
+    onItem: (e) => schedule([TODAY_KEY, PATH_KEY, itemKey(e.item_id)], PROGRESS_DEBOUNCE_MS),
     onSync: () => schedule(all, 0),
     onPoll: () => schedule(all, 0),
     onProgress: (e) => {
@@ -218,6 +228,7 @@ function subscribe(client: QueryClient): () => void {
     onSync: () => lives.forEach((l) => l.handlers.onSync()),
     onPoll: () => lives.forEach((l) => l.handlers.onPoll()),
     onProgress: (e) => lives.forEach((l) => l.handlers.onProgress(e)),
+    onItem: (e) => lives.forEach((l) => l.handlers.onItem?.(e)),
   });
   const mine = live;
   return () => {
