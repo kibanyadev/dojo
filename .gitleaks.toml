@@ -1,0 +1,8 @@
+# The default rules, plus the example VAPID private key of .env.example: local only, pre and pro refuse it.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "example VAPID private key, local only"
+regexTarget = "match"
+regexes = ['''q1dXpw3UpT5VOmu_cf_v6ih07Aems3njxI-JWgLcM94''']

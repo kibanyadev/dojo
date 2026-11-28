@@ -67,6 +67,12 @@ func New(ready Readiness, auth Auth, limits *RateLimits, signin *SignIn, cli *CL
 		mux.HandleFunc("POST /v1/inbox/{id}/read", requireSession(auth.Inbox.read))
 		mux.HandleFunc("POST /v1/inbox/read-all", requireSession(auth.Inbox.readAll))
 	}
+	if auth.Push != nil {
+		mux.HandleFunc("GET "+pushKeyPath, requireCookie(auth.Push.key))
+		mux.HandleFunc("GET "+pushSubsPath, requireCookie(auth.Push.list))
+		mux.HandleFunc("POST "+pushSubsPath, requireCookie(auth.Push.subscribe))
+		mux.HandleFunc("DELETE "+pushSubsPath+"/{id}", requireCookie(auth.Push.remove))
+	}
 	if auth.Reports != nil {
 		mux.HandleFunc("POST "+reportsPath, requireSession(auth.postReport))
 	}

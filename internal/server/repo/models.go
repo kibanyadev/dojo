@@ -209,6 +209,17 @@ type Learner struct {
 	HostedDefault    bool
 	EmailSource      pgtype.Text
 	FirstRunSeenAt   pgtype.Timestamptz
+	TimeZone         pgtype.Text
+}
+
+type NotificationPref struct {
+	OrgID     pgtype.UUID
+	LearnerID pgtype.UUID
+	Kind      string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+	Push      pgtype.Bool
+	Email     pgtype.Bool
 }
 
 type Operator struct {
@@ -266,6 +277,19 @@ type PendingCommit struct {
 	ClientAt  pgtype.Timestamptz
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
+}
+
+type PushSubscription struct {
+	ID            pgtype.UUID
+	OrgID         pgtype.UUID
+	LearnerID     pgtype.UUID
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	Endpoint      string
+	P256dh        string
+	Auth          string
+	DeviceLabel   string
+	LastSuccessAt pgtype.Timestamptz
 }
 
 type QuizAnswer struct {

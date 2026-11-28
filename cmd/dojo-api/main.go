@@ -115,10 +115,16 @@ func run(args []string) error {
 	go server.RunReviewWorker(ctx, &server.ReviewWorker{Store: store, Adapter: adapter,
 		Enabled: server.NewReviewsEnabled(store.Queries(), flagTTL), Batch: reviewBatch}, reviewEvery)
 
+	pushCfg, err := server.ParsePush(os.Getenv)
+	if err != nil {
+		return err
+	}
+
 	auth := server.Auth{Store: store.Queries(), Catalog: store.Queries(),
 		Bundles: &server.Bundles{Store: store.Queries(), Signer: objects}, Secure: secure, Events: store,
 		Stream: hub, StreamHeartbeat: heartbeat,
 		Tickets: &server.Tickets{Reader: store.Queries(), Opener: store}, Items: &server.Items{Reader: store.Queries(), Answerer: store, Chooser: store, Drafter: store, Submitter: store, FlagTTL: flagTTL}, Inbox: &server.Inbox{Store: store}, Reports: store,
+		Push: &server.Push{Store: store, Policy: pushCfg.Policy, VAPID: pushCfg.VAPID},
 		Onboarding: &server.Onboarding{Facts: store.Queries(), Doctor: store, Confirmer: store,
 			Env: os.Getenv("DOJO_ENV"), PublicOrigin: strings.TrimRight(os.Getenv("PUBLIC_ORIGIN"), "/")}}
 	cli := &server.CLILogin{GitHub: gh, Store: store.Queries(), Tokens: store}

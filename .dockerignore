@@ -9,6 +9,7 @@
 !internal/storage
 !internal/mentor
 !internal/ai
+!internal/webpush
 !cmd/dojo-admin
 !internal/admin
 !cmd/dojo-catalog-load

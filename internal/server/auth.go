@@ -70,6 +70,8 @@ type Auth struct {
 	Items *Items
 	// Inbox backs /v1/inbox; nil leaves the routes out.
 	Inbox *Inbox
+	// Push backs /v1/push; nil leaves the routes out.
+	Push *Push
 }
 
 // ParseOrigin validates PUBLIC_ORIGIN for the environment (local, pre or pro) and reports

@@ -2263,6 +2263,16 @@ named in the last column.
   still cannot reach our network. It follows no redirect and times out at 5 s. Locally
   `DOJO_PUSH_ALLOWED_ORIGINS` adds `http://fake-push:8080` and turns the dial guard off for that origin
   only; the API refuses to start in pre or pro with it set.
+  Details decided in PR 28: the API stores the endpoint with its host normalized (lower case, no trailing dot,
+  no `:443`), so two spellings of one endpoint are one row; a missing `endpoint` is `400 bad_request`, a
+  present one the policy refuses is `400 endpoint_not_allowed`. `time_zone` and `device_label` are required
+  on `POST`, `p256dh` must also be a valid P-256 point, base64url is strict and unpadded, and the browser's
+  `expirationTime` field is accepted and ignored. Postgres has the last word on the zone name (a name Go
+  accepts and it rejects is `400 bad_request`). One subscribe runs in one transaction under the learner's
+  class-1 lock, which keeps the cap of 10 exact; two learners racing on one endpoint can collide on the unique
+  index, so that transaction is rerun up to 3 times. `DOJO_PUSH_ALLOWED_HOSTS` is a comma list that replaces
+  the default hosts. A request value (endpoint, label, zone, id) never reaches an error string or a log line:
+  a failed request logs its route and, for a database error, the SQLSTATE.
 - **Sending:** an inbox item of kind `check` or `story` is written with `push_state` pending; the
   others with `none`. A worker claims pending rows with the same lease statement as the review worker
   (on `inbox_items.push_next_at`, batch 20, every `DOJO_PUSH_INTERVAL_SECONDS`, default 5), then

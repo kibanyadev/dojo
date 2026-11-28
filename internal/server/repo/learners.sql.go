@@ -24,7 +24,7 @@ func (q *Queries) DeleteLearner(ctx context.Context, id pgtype.UUID) (bool, erro
 }
 
 const getLearnerByGithubID = `-- name: GetLearnerByGithubID :one
-SELECT id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at FROM learners WHERE github_id = $1
+SELECT id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at, time_zone FROM learners WHERE github_id = $1
 `
 
 func (q *Queries) GetLearnerByGithubID(ctx context.Context, githubID int64) (Learner, error) {
@@ -50,12 +50,13 @@ func (q *Queries) GetLearnerByGithubID(ctx context.Context, githubID int64) (Lea
 		&i.HostedDefault,
 		&i.EmailSource,
 		&i.FirstRunSeenAt,
+		&i.TimeZone,
 	)
 	return i, err
 }
 
 const getLearnerByID = `-- name: GetLearnerByID :one
-SELECT id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at FROM learners WHERE id = $1
+SELECT id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at, time_zone FROM learners WHERE id = $1
 `
 
 func (q *Queries) GetLearnerByID(ctx context.Context, id pgtype.UUID) (Learner, error) {
@@ -81,6 +82,7 @@ func (q *Queries) GetLearnerByID(ctx context.Context, id pgtype.UUID) (Learner, 
 		&i.HostedDefault,
 		&i.EmailSource,
 		&i.FirstRunSeenAt,
+		&i.TimeZone,
 	)
 	return i, err
 }
@@ -121,13 +123,13 @@ WITH ins AS (
                           age_confirmed_at, terms_accepted_at, terms_version, usage_stats)
     VALUES ($1, $2, $3, $4, $5, CASE WHEN $5::text IS NULL THEN NULL ELSE 'github' END, $6, $7, $8, $9, $10)
     ON CONFLICT (github_id) DO NOTHING
-    RETURNING id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at
+    RETURNING id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at, time_zone
 ), queued AS (
     INSERT INTO email_outbox (learner_id, to_address, kind, ref)
     SELECT id, email, 'E1', id::text FROM ins WHERE email IS NOT NULL
     ON CONFLICT (kind, ref) DO NOTHING
 )
-SELECT id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at FROM ins
+SELECT id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at, time_zone FROM ins
 `
 
 type InsertLearnerWithWelcomeParams struct {
@@ -163,6 +165,7 @@ type InsertLearnerWithWelcomeRow struct {
 	HostedDefault    bool
 	EmailSource      pgtype.Text
 	FirstRunSeenAt   pgtype.Timestamptz
+	TimeZone         pgtype.Text
 }
 
 // A new learner and their welcome mail (E1, ref = the learner id) in one statement, so both exist or
@@ -201,6 +204,7 @@ func (q *Queries) InsertLearnerWithWelcome(ctx context.Context, arg InsertLearne
 		&i.HostedDefault,
 		&i.EmailSource,
 		&i.FirstRunSeenAt,
+		&i.TimeZone,
 	)
 	return i, err
 }
@@ -208,7 +212,7 @@ func (q *Queries) InsertLearnerWithWelcome(ctx context.Context, arg InsertLearne
 const markFirstRunSeen = `-- name: MarkFirstRunSeen :one
 UPDATE learners SET first_run_seen_at = now(), updated_at = now()
 WHERE id = $1 AND first_run_seen_at IS NULL
-RETURNING id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at
+RETURNING id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at, time_zone
 `
 
 // No row back means the first run was already seen: a repeat changes nothing.
@@ -235,6 +239,7 @@ func (q *Queries) MarkFirstRunSeen(ctx context.Context, id pgtype.UUID) (Learner
 		&i.HostedDefault,
 		&i.EmailSource,
 		&i.FirstRunSeenAt,
+		&i.TimeZone,
 	)
 	return i, err
 }
@@ -263,13 +268,13 @@ WITH upd AS (
     UPDATE learners l
     SET email = $1::text, email_source = 'learner', updated_at = now()
     WHERE l.id = $2::uuid AND l.email IS NULL
-    RETURNING id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at
+    RETURNING id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at, time_zone
 ), queued AS (
     INSERT INTO email_outbox (learner_id, to_address, kind, ref)
     SELECT upd.id, upd.email, 'E1', upd.id::text FROM upd
     ON CONFLICT (kind, ref) DO NOTHING
 )
-SELECT id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at FROM upd
+SELECT id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at, time_zone FROM upd
 `
 
 type SetLearnerEmailWithWelcomeParams struct {
@@ -297,6 +302,7 @@ type SetLearnerEmailWithWelcomeRow struct {
 	HostedDefault    bool
 	EmailSource      pgtype.Text
 	FirstRunSeenAt   pgtype.Timestamptz
+	TimeZone         pgtype.Text
 }
 
 // The learner's own address (design 3.9), only while none is on file, with E1 queued in the same statement.
@@ -324,6 +330,7 @@ func (q *Queries) SetLearnerEmailWithWelcome(ctx context.Context, arg SetLearner
 		&i.HostedDefault,
 		&i.EmailSource,
 		&i.FirstRunSeenAt,
+		&i.TimeZone,
 	)
 	return i, err
 }
@@ -337,7 +344,7 @@ SET username = COALESCE($2, username),
     hosted_default = COALESCE($6, hosted_default),
     updated_at = now()
 WHERE id = $1
-RETURNING id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at
+RETURNING id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at, time_zone
 `
 
 type UpdateLearnerProfileParams struct {
@@ -379,6 +386,7 @@ func (q *Queries) UpdateLearnerProfile(ctx context.Context, arg UpdateLearnerPro
 		&i.HostedDefault,
 		&i.EmailSource,
 		&i.FirstRunSeenAt,
+		&i.TimeZone,
 	)
 	return i, err
 }
@@ -395,14 +403,14 @@ WITH prev AS (
         email = COALESCE(EXCLUDED.email, learners.email),
         email_source = CASE WHEN EXCLUDED.email IS NULL THEN learners.email_source ELSE 'github' END,
         updated_at = now()
-    RETURNING id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at
+    RETURNING id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at, time_zone
 ), queued AS (
     INSERT INTO email_outbox (learner_id, to_address, kind, ref)
     SELECT up.id, up.email, 'E1', up.id::text FROM up JOIN prev ON prev.id = up.id
     WHERE prev.email IS NULL AND up.email IS NOT NULL
     ON CONFLICT (kind, ref) DO NOTHING
 )
-SELECT id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at FROM up
+SELECT id, org_id, created_at, updated_at, github_id, github_login, username, email, language, age_confirmed_at, terms_accepted_at, usage_stats, analytics_consent, suspended_at, terms_version, chosen_path_id, hosted_default, email_source, first_run_seen_at, time_zone FROM up
 `
 
 type UpsertLearnerWithWelcomeParams struct {
@@ -438,6 +446,7 @@ type UpsertLearnerWithWelcomeRow struct {
 	HostedDefault    bool
 	EmailSource      pgtype.Text
 	FirstRunSeenAt   pgtype.Timestamptz
+	TimeZone         pgtype.Text
 }
 
 // A sign-in refresh. A GitHub email replaces the stored one and marks it as GitHub's; with none the stored one stays.
@@ -477,6 +486,7 @@ func (q *Queries) UpsertLearnerWithWelcome(ctx context.Context, arg UpsertLearne
 		&i.HostedDefault,
 		&i.EmailSource,
 		&i.FirstRunSeenAt,
+		&i.TimeZone,
 	)
 	return i, err
 }

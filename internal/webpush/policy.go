@@ -69,6 +69,16 @@ func (p Policy) Check(endpoint string) error {
 	return err
 }
 
+// Normalize validates an endpoint like Check and returns it with its host normalized, the form to store
+// so two spellings of one endpoint are one row; the error wraps ErrEndpoint.
+func (p Policy) Normalize(endpoint string) (string, error) {
+	u, err := p.parse(endpoint)
+	if err != nil {
+		return "", err
+	}
+	return u.String(), nil
+}
+
 // parse returns the endpoint with its host normalized (lower case, no trailing dot, no :443).
 func (p Policy) parse(endpoint string) (*url.URL, error) {
 	if len(endpoint) > 1024 {

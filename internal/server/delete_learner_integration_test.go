@@ -49,6 +49,8 @@ func seedDeletableLearner(t *testing.T, githubID, email, username string) string
 	asOwner(t, "INSERT INTO inbox_items (org_id, learner_id, kind, ref, title, body, url) SELECT org_id, id, 'check', 'a/b', 't', 'b', '/t/a/b' FROM learners WHERE id = '"+id+"'")
 	asOwner(t, "INSERT INTO belt_marks (org_id, slug, belt, title, summary, position) SELECT id, 'del-mark', 'white', 'M', 'S', 99 FROM orgs WHERE slug = 'public' ON CONFLICT (slug) DO NOTHING")
 	asOwner(t, "INSERT INTO belt_awards (org_id, learner_id, mark_id, source_item_id) SELECT l.org_id, l.id, m.id, 'a/b' FROM learners l, belt_marks m WHERE l.id = '"+id+"' AND m.slug = 'del-mark'")
+	asOwner(t, "INSERT INTO push_subscriptions (org_id, learner_id, endpoint, p256dh, auth, device_label) SELECT org_id, id, 'https://push.example/"+username+"', repeat('A', 87), repeat('B', 22), 'Phone' FROM learners WHERE id = '"+id+"'")
+	asOwner(t, "INSERT INTO notification_prefs (org_id, learner_id, kind, push) SELECT org_id, id, 'check', false FROM learners WHERE id = '"+id+"'")
 	return id
 }
 
@@ -75,7 +77,7 @@ func TestDeleteLearnerRemovesOnlyThatLearner(t *testing.T) {
 		{"learners", "id"}, {"sessions", "learner_id"}, {"cli_tokens", "learner_id"}, {"telemetry_events", "learner_id"},
 		{"events", "learner_id"}, {"ticket_progress", "learner_id"}, {"hint_opens", "learner_id"},
 		{"item_completions", "learner_id"}, {"quiz_answers", "learner_id"}, {"story_choices", "learner_id"}, {"inbox_items", "learner_id"},
-		{"belt_awards", "learner_id"},
+		{"belt_awards", "learner_id"}, {"push_subscriptions", "learner_id"}, {"notification_prefs", "learner_id"},
 	} {
 		if got := countWhere(t, table.name, table.col+" = '"+victim+"'"); got != "0" {
 			t.Fatalf("%s rows left for the deleted learner: %s", table.name, got)
