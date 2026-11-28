@@ -235,6 +235,36 @@ func TestDropRefusedForCompletionOfAnyKind(t *testing.T) {
 	}
 }
 
+func TestDropRefusedForHeldMark(t *testing.T) {
+	wipe(t)
+	dir := richFixture(t)
+	mustLoad(t, dir, v1, "4 tickets")
+	psql(t, seedLearner+"; INSERT INTO belt_awards (org_id, learner_id, mark_id, source_item_id) "+
+		"SELECT l.org_id, l.id, m.id, 'support-l1/feedback-01' FROM learners l, belt_marks m WHERE l.github_id = 9101 AND m.slug = 'feedback-round'")
+	if err := os.RemoveAll(filepath.Join(dir, "support-l1", "feedback-01")); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "catalog.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	put(t, dir, "catalog.yaml", strings.Replace(string(b), "  - {slug: feedback-round, belt: white, title: Feedback round with Carmen, summary: Take feedback}\n", "", 1))
+	out, lerr := load(t, dir, v2)
+	if lerr == nil || !strings.Contains(out, "marks that learners hold would disappear: feedback-round") {
+		t.Fatalf("want a refusal naming the mark, got %v\n%s", lerr, out)
+	}
+	if got := psql(t, "SELECT (SELECT count(*) FROM belt_marks) || ',' || (SELECT count(*) FROM catalog_items WHERE id = 'support-l1/feedback-01')"); got != "3,1" {
+		t.Fatalf("a refused load changes nothing: %s", got)
+	}
+
+	// Once nobody holds it, the same load retires the mark.
+	psql(t, "DELETE FROM belt_awards")
+	mustLoad(t, dir, v2, "4 tickets")
+	if got := psql(t, "SELECT count(*) FROM belt_marks"); got != "2" {
+		t.Fatalf("marks after retire: %s", got)
+	}
+}
+
 func TestPracticeDropRefusedWhenStarted(t *testing.T) {
 	wipe(t)
 	dir := richFixture(t)

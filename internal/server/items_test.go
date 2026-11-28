@@ -54,7 +54,12 @@ type fakeItems struct {
 	choice  *repo.GetStoryChoiceRow
 	work    *repo.GetWrittenWorkRow
 	flag    string // ai_reviews_enabled as stored; "" is true
+	held    bool   // the learner holds the item's mark
 	err     error
+}
+
+func (f *fakeItems) IsMarkHeld(context.Context, repo.IsMarkHeldParams) (bool, error) {
+	return f.held, nil
 }
 
 func (f *fakeItems) GetWrittenWork(context.Context, repo.GetWrittenWorkParams) (repo.GetWrittenWorkRow, error) {

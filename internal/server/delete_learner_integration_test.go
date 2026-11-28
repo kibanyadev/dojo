@@ -23,6 +23,7 @@ func deleteFixtureCleanup(t *testing.T) {
 		asOwner(t, "DELETE FROM admin_audit WHERE action = '"+delMarker+"'")
 		asOwner(t, "DELETE FROM operators WHERE github_id = 920000009")
 		asOwner(t, "DELETE FROM learners WHERE github_id IN ("+delVictimGH+","+delBystanderGH+")")
+		asOwner(t, "DELETE FROM belt_marks WHERE slug = 'del-mark'")
 	}
 	clean()
 	t.Cleanup(clean)
@@ -46,6 +47,8 @@ func seedDeletableLearner(t *testing.T, githubID, email, username string) string
 	asOwner(t, "INSERT INTO quiz_answers (org_id, learner_id, item_id, question_id, first_choice, first_correct, last_choice, last_correct) SELECT org_id, id, '"+delMarker+"/"+username+"', 'q', 0, true, 0, true FROM learners WHERE id = '"+id+"'")
 	asOwner(t, "INSERT INTO story_choices (org_id, learner_id, item_id, choice_id) SELECT org_id, id, '"+delMarker+"/"+username+"', 'c' FROM learners WHERE id = '"+id+"'")
 	asOwner(t, "INSERT INTO inbox_items (org_id, learner_id, kind, ref, title, body, url) SELECT org_id, id, 'check', 'a/b', 't', 'b', '/t/a/b' FROM learners WHERE id = '"+id+"'")
+	asOwner(t, "INSERT INTO belt_marks (org_id, slug, belt, title, summary, position) SELECT id, 'del-mark', 'white', 'M', 'S', 99 FROM orgs WHERE slug = 'public' ON CONFLICT (slug) DO NOTHING")
+	asOwner(t, "INSERT INTO belt_awards (org_id, learner_id, mark_id, source_item_id) SELECT l.org_id, l.id, m.id, 'a/b' FROM learners l, belt_marks m WHERE l.id = '"+id+"' AND m.slug = 'del-mark'")
 	return id
 }
 
@@ -72,6 +75,7 @@ func TestDeleteLearnerRemovesOnlyThatLearner(t *testing.T) {
 		{"learners", "id"}, {"sessions", "learner_id"}, {"cli_tokens", "learner_id"}, {"telemetry_events", "learner_id"},
 		{"events", "learner_id"}, {"ticket_progress", "learner_id"}, {"hint_opens", "learner_id"},
 		{"item_completions", "learner_id"}, {"quiz_answers", "learner_id"}, {"story_choices", "learner_id"}, {"inbox_items", "learner_id"},
+		{"belt_awards", "learner_id"},
 	} {
 		if got := countWhere(t, table.name, table.col+" = '"+victim+"'"); got != "0" {
 			t.Fatalf("%s rows left for the deleted learner: %s", table.name, got)

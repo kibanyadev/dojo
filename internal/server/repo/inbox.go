@@ -40,12 +40,13 @@ type InboxPage struct {
 	More bool
 }
 
-// InboxMark is the detail of a mark item: the mark and the size of its belt.
+// InboxMark is the detail of a mark item: the mark, whether the learner holds it, and the size of its belt.
 type InboxMark struct {
 	Slug    string
 	Title   string
 	Summary string
 	Belt    string
+	Held    bool
 	Total   int64
 }
 
@@ -100,12 +101,12 @@ func (s *Store) GetInboxItem(ctx context.Context, learner, id pgtype.UUID) (Inbo
 	}
 	out := InboxEntry{InboxRow: InboxRow{r.ID, r.Kind, r.Ref, r.Title, r.Body, r.Url, r.ReadAt.Valid, r.UpdatedAt.Time}}
 	if r.Kind == "mark" {
-		m, err := s.q.GetInboxMarkDetail(ctx, r.Ref)
+		m, err := s.q.GetInboxMarkDetail(ctx, GetInboxMarkDetailParams{LearnerID: learner, Slug: r.Ref})
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return InboxEntry{}, fmt.Errorf("get mark detail: %w", err)
 		}
 		if err == nil {
-			out.Mark = &InboxMark{Slug: m.Slug, Title: m.Title, Summary: m.Summary, Belt: m.Belt, Total: m.Total}
+			out.Mark = &InboxMark{Slug: m.Slug, Title: m.Title, Summary: m.Summary, Belt: m.Belt, Held: m.Held, Total: m.Total}
 		}
 	}
 	return out, nil
