@@ -37,6 +37,10 @@ const (
 	bundleBurst = 30
 	bundlePer   = time.Minute
 
+	// Between-tickets writes (design 3.10), one budget per learner across routes and devices.
+	betweenBurst = 60
+	betweenPer   = time.Minute
+
 	maxKeys    = 50_000
 	sweepEvery = 30 * time.Second
 	// capSweepEvery bounds how often a full table is swept before evicting.
@@ -140,6 +144,8 @@ type RateLimits struct {
 	Read Limiter
 	// Bundle is keyed by learner id and covers only the bundle route.
 	Bundle Limiter
+	// Between is keyed by learner id and covers the between-tickets writes (POST /v1/items/{id}/{action}).
+	Between Limiter
 	// Stream is keyed by learner id and covers connections to GET /v1/stream; nil disables it.
 	Stream Limiter
 	// Callback is taken inside the sign-in callback, after the state cookie checks out and before any GitHub call.
@@ -157,6 +163,7 @@ func NewRateLimits(hops int) *RateLimits {
 		Write:         newMemLimiter(writeBurst, writePer, maxKeys, time.Now),
 		Read:          newMemLimiter(readBurst, readPer, maxKeys, time.Now),
 		Bundle:        newMemLimiter(bundleBurst, bundlePer, maxKeys, time.Now),
+		Between:       newMemLimiter(betweenBurst, betweenPer, maxKeys, time.Now),
 		Stream:        newMemLimiter(streamBurst, readPer, maxKeys, time.Now),
 		Callback:      newMemLimiter(authBurst, authPer, maxKeys, time.Now),
 		Hops:          hops,
@@ -182,6 +189,10 @@ func (rl *RateLimits) wrap(mux *http.ServeMux, next http.Handler) http.Handler {
 		var bundleKey string
 		if p, authed := principalOf(r.Context()); authed && rl.Bundle != nil && pattern == "GET "+ticketsPrefix && isTicketRequest(r, routeBundle) {
 			bundleKey = "learner:" + p.learner.String()
+		}
+		var betweenKey string
+		if p, authed := principalOf(r.Context()); authed && rl.Between != nil && pattern == "POST "+itemsPrefix && isItemWrite(r) {
+			betweenKey = "learner:" + p.learner.String()
 		}
 		isStart := pattern == "POST "+startPath && r.URL.Path == startPath
 		switch {
@@ -244,6 +255,12 @@ func (rl *RateLimits) wrap(mux *http.ServeMux, next http.Handler) http.Handler {
 				return
 			}
 		}
+		if betweenKey != "" {
+			if ok, retry := rl.Between.Allow(betweenKey); !ok {
+				refuse(retry)
+				return
+			}
+		}
 		if bundleKey != "" {
 			if ok, retry := rl.Bundle.Allow(bundleKey); !ok {
 				refuse(retry)
@@ -252,6 +269,12 @@ func (rl *RateLimits) wrap(mux *http.ServeMux, next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// isItemWrite reports a request for an item id with an action word, the only POSTs the dispatcher serves.
+func isItemWrite(r *http.Request) bool {
+	_, action, ok := parseItemPath(r.URL.Path)
+	return ok && action != ""
 }
 
 // isLearnerRead reports the routed patterns that take the per-learner read budget.

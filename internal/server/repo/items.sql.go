@@ -66,6 +66,27 @@ func (q *Queries) GetStoryChoice(ctx context.Context, arg GetStoryChoiceParams) 
 	return i, err
 }
 
+const insertItemCompletion = `-- name: InsertItemCompletion :one
+INSERT INTO item_completions (org_id, learner_id, item_id)
+VALUES ($1, $2, $3)
+ON CONFLICT (learner_id, item_id) DO NOTHING
+RETURNING item_id
+`
+
+type InsertItemCompletionParams struct {
+	OrgID     pgtype.UUID
+	LearnerID pgtype.UUID
+	ItemID    string
+}
+
+// No row back means the item was already complete.
+func (q *Queries) InsertItemCompletion(ctx context.Context, arg InsertItemCompletionParams) (string, error) {
+	row := q.db.QueryRow(ctx, insertItemCompletion, arg.OrgID, arg.LearnerID, arg.ItemID)
+	var item_id string
+	err := row.Scan(&item_id)
+	return item_id, err
+}
+
 const itemIsDone = `-- name: ItemIsDone :one
 SELECT EXISTS (SELECT 1 FROM item_completions WHERE learner_id = $1 AND item_id = $2) AS done
 `
@@ -125,4 +146,34 @@ func (q *Queries) ListQuizAnswers(ctx context.Context, arg ListQuizAnswersParams
 		return nil, err
 	}
 	return items, nil
+}
+
+const upsertQuizAnswer = `-- name: UpsertQuizAnswer :exec
+INSERT INTO quiz_answers (org_id, learner_id, item_id, question_id, first_choice, first_correct, last_choice, last_correct)
+VALUES ($1, $2, $3, $4, $5, $6, $5, $6)
+ON CONFLICT (learner_id, item_id, question_id) DO UPDATE
+SET updated_at = now(), last_choice = EXCLUDED.last_choice, last_correct = EXCLUDED.last_correct, last_at = now()
+`
+
+type UpsertQuizAnswerParams struct {
+	OrgID      pgtype.UUID
+	LearnerID  pgtype.UUID
+	ItemID     string
+	QuestionID string
+	Choice     int16
+	Correct    bool
+}
+
+// POST /v1/items/{id}/answers: the first answer writes first_*, every answer writes last_* (the grants
+// refuse an update of first_*). Run under the learner's class-1 lock.
+func (q *Queries) UpsertQuizAnswer(ctx context.Context, arg UpsertQuizAnswerParams) error {
+	_, err := q.db.Exec(ctx, upsertQuizAnswer,
+		arg.OrgID,
+		arg.LearnerID,
+		arg.ItemID,
+		arg.QuestionID,
+		arg.Choice,
+		arg.Correct,
+	)
+	return err
 }

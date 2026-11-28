@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -52,9 +54,61 @@ type ItemReader interface {
 	GetStoryChoice(ctx context.Context, arg repo.GetStoryChoiceParams) (repo.GetStoryChoiceRow, error)
 }
 
-// Items serves GET /v1/items/{id} for quiz and story items (design 3.10).
+// QuizAnswerer records one answer of POST /v1/items/{id}/answers.
+type QuizAnswerer interface {
+	AnswerQuiz(ctx context.Context, in repo.AnswerQuizIn) (repo.AnswerQuizOut, error)
+}
+
+// Items serves GET /v1/items/{id} for quiz and story items and the quiz answers (design 3.10).
 type Items struct {
 	Reader ItemReader
+	// Answerer backs POST /v1/items/{id}/answers; nil leaves the action not found.
+	Answerer QuizAnswerer
+}
+
+const maxAnswerBody = 1 << 10
+
+type answerRequest struct {
+	Question *string `json:"question"`
+	Choice   *int    `json:"choice"`
+}
+
+// postItemRoute is the POST /v1/items/ dispatcher. Only answers is served so far; every other
+// action word, a bare id and a malformed path are not found.
+func (a Auth) postItemRoute(w http.ResponseWriter, r *http.Request) {
+	id, action, ok := parseItemPath(r.URL.Path)
+	if !ok || action != "answers" || a.Items.Answerer == nil {
+		writeError(w, http.StatusNotFound, "not_found")
+		return
+	}
+	a.Items.answer(w, r, id)
+}
+
+func (it *Items) answer(w http.ResponseWriter, r *http.Request, id string) {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxAnswerBody))
+	dec.DisallowUnknownFields()
+	var req answerRequest
+	if err := dec.Decode(&req); err != nil || dec.Decode(&struct{}{}) != io.EOF ||
+		req.Question == nil || *req.Question == "" || req.Choice == nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return
+	}
+	p, _ := principalOf(r.Context())
+	out, err := it.Answerer.AnswerQuiz(context.WithoutCancel(r.Context()),
+		repo.AnswerQuizIn{Learner: p.learner, ItemID: id, QuestionID: *req.Question, Choice: *req.Choice})
+	switch {
+	case errors.Is(err, repo.ErrItemNotFound), errors.Is(err, repo.ErrQuestionNotFound):
+		writeError(w, http.StatusNotFound, "not_found")
+	case errors.Is(err, repo.ErrChoiceRange):
+		writeError(w, http.StatusBadRequest, "bad_request")
+	case errors.Is(err, repo.ErrLearnerGone):
+		writeError(w, http.StatusUnauthorized, "unauthenticated")
+	case err != nil:
+		slog.Error("quiz answer failed", "route", r.Pattern, "error", err)
+		writeError(w, http.StatusInternalServerError, "server_error")
+	default:
+		writeNoStore(w, out)
+	}
 }
 
 type itemHead struct {

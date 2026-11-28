@@ -149,6 +149,21 @@ export interface Ticket {
   progress: TicketProgress | null;
 }
 
+export type Difficulty = 'easy' | 'medium' | 'hard';
+
+/** One row of GET /v1/practice: practice scenarios first, then tickets of unlocked roles as revisits. */
+export interface PracticeItem {
+  id: string;
+  kind: 'practice' | 'ticket';
+  role: string | null;
+  title: string;
+  est_minutes: number;
+  tags: string[];
+  difficulty: Difficulty | null;
+  state: TicketState | null;
+  lab_state: LabState | null;
+}
+
 export interface ActivityDay {
   /** Calendar day `YYYY-MM-DD` in the zone the read was made with. */
   day: string;
@@ -242,6 +257,7 @@ async function getJSON<T>(path: string): Promise<T> {
 export const fetchCatalog = () => getJSON<Catalog>('/v1/catalog');
 export const fetchPath = () => getJSON<LearnerPath>('/v1/path');
 export const fetchToday = () => getJSON<Today>('/v1/today');
+export const fetchPractice = () => getJSON<{ items: PracticeItem[] }>('/v1/practice');
 
 /** The browser's IANA zone, or null when it cannot say (the read then omits tz and the server uses UTC). */
 export function browserZone(): string | null {
@@ -302,6 +318,7 @@ export const CATALOG_KEY = ['catalog'] as const;
 export const PATH_KEY = ['path'] as const;
 export const TODAY_KEY = ['today'] as const;
 export const ACTIVITY_KEY = ['activity'] as const;
+export const PRACTICE_KEY = ['practice'] as const;
 export const ticketKey = (id: string) => ['ticket', id] as const;
 export const TICKET_KEY_PREFIX = ['ticket'] as const;
 
@@ -311,6 +328,7 @@ const retry = (count: number, err: Error) => !(err instanceof ReadError && err.r
 export const useCatalog = () => useQuery({ queryKey: CATALOG_KEY, queryFn: fetchCatalog, retry, staleTime: 5 * 60_000 });
 export const usePath = () => useQuery({ queryKey: PATH_KEY, queryFn: fetchPath, retry, staleTime: Infinity });
 export const useToday = () => useQuery({ queryKey: TODAY_KEY, queryFn: fetchToday, retry, staleTime: Infinity });
+export const usePractice = () => useQuery({ queryKey: PRACTICE_KEY, queryFn: fetchPractice, retry, staleTime: Infinity });
 export const useTicket = (id: string) =>
   useQuery({ queryKey: ticketKey(id), queryFn: () => fetchTicket(id), retry, staleTime: Infinity });
 export const useActivity = () => useQuery({ queryKey: ACTIVITY_KEY, queryFn: fetchActivity, retry, staleTime: Infinity });
