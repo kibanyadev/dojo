@@ -6,12 +6,29 @@ import { NotificationsBell } from './NotificationsBell';
 import { TabBar, TopNav } from './PrimaryNav';
 import { useLiveData } from '../lib/stream';
 import { apiFetch } from '../lib/api';
+import { useOffline } from '../lib/offline';
+import { clearDataCache } from '../lib/pwa';
 import type { Me } from '../lib/me';
 
 /** POST /v1/auth/logout. 204, and 401/404 (already signed out, endpoint not live yet) all mean "go to O1". */
 export async function signOut(): Promise<boolean> {
-  const res = await apiFetch('/v1/auth/logout', { method: 'POST', body: '{}' });
+  await clearDataCache();
+  // Clear again after the request: a read started before it may have cached learner data meanwhile.
+  const res = await apiFetch('/v1/auth/logout', { method: 'POST', body: '{}' }).finally(() => clearDataCache());
   return res.status === 204 || res.status === 401 || res.status === 404;
+}
+
+/** W4: shown while the page runs on the worker's cached copy. The lab keeps running on the laptop. */
+export function OfflineBanner() {
+  if (!useOffline()) return null;
+  return (
+    <div role="status" className="mb-3.5 flex items-start gap-2.5 rounded-[14px] border border-line bg-surface2 px-3.5 py-3 text-sm leading-normal">
+      <span className="mt-1.5 size-2.5 flex-none rounded-full bg-[#8A5A00]" aria-hidden="true" />
+      <span>
+        <b>You are offline.</b> Your lab keeps running on your laptop, and dojo check results show here when you are back.
+      </span>
+    </div>
+  );
 }
 
 /** The signed-in shell: header (home, nav, sign out, profile avatar to Settings) around a page. */
@@ -74,6 +91,7 @@ export function AppFrame({ me, children }: { me: Me; children: ReactNode }) {
         </div>
       </header>
       <main className="mx-auto max-w-[1200px] px-4 pt-6 pb-28 md:px-6 md:py-9">
+        <OfflineBanner />
         <p role="status" aria-live="polite" className="m-0 text-[13px] font-semibold text-bad empty:hidden">
           {failed ? 'Could not sign out. Please try again.' : ''}
         </p>

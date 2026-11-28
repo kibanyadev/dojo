@@ -6,6 +6,7 @@ import { ReportDialog } from '../components/ReportDialog';
 import { Inline, Markdown } from '../lib/markdown';
 import { ME_KEY, type Me } from '../lib/me';
 import { openHint, READ_MESSAGES, ReadError, ticketKey, useTicket, type Hint, type ReadFailure, type Ticket, type TicketProgress } from '../lib/read';
+import { OFFLINE_WRITE_NOTE, useOffline } from '../lib/offline';
 import { useLiveData } from '../lib/stream';
 import { CopyCommand } from './Today';
 
@@ -15,7 +16,7 @@ const badge = 'inline-flex h-[26px] flex-none items-center rounded-md px-2.5 tex
 const mono = 'font-mono text-muted';
 const chip = 'rounded-md bg-surface2 px-1.5 py-px font-mono text-[13px]';
 const ghostBtn =
-  'inline-flex h-11 items-center justify-center rounded-[10px] border border-ctl bg-surface px-3.5 text-sm font-bold text-fg md:h-9';
+  'inline-flex h-11 items-center justify-center rounded-[10px] border border-ctl bg-surface px-3.5 text-sm font-bold text-fg disabled:opacity-45 md:h-9';
 const TICKET_ID = /^[^/]+\/[^/]+$/;
 
 function ago(iso: string | null, now = Date.now()): string {
@@ -268,6 +269,7 @@ const HINT_ERRORS: Partial<Record<'hint_locked' | ReadFailure, string>> = {
 };
 
 function Hints({ ticket }: { ticket: Ticket }) {
+  const offline = useOffline();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -324,7 +326,7 @@ function Hints({ ticket }: { ticket: Ticket }) {
                     <button
                       type="button"
                       aria-label={`Show hint ${n}`}
-                      disabled={busy}
+                      disabled={busy || offline}
                       onClick={() => void show(n)}
                       className="inline-flex h-11 min-w-16 items-center justify-center rounded-[10px] border border-line bg-surface px-3.5 text-sm font-bold text-fg disabled:opacity-45 md:h-9"
                     >
@@ -340,7 +342,7 @@ function Hints({ ticket }: { ticket: Ticket }) {
       <p role="status" className="m-0 text-xs font-bold text-bad empty:hidden">
         {error}
       </p>
-      <p className="m-0 text-[13px] text-muted">Hints never block you. They are only counted for you.</p>
+      <p className="m-0 text-[13px] text-muted">{offline ? OFFLINE_WRITE_NOTE : 'Hints never block you. They are only counted for you.'}</p>
     </section>
   );
 }
@@ -429,6 +431,7 @@ function TicketTitle({ text }: { text: string }) {
 function Detail({ ticket }: { ticket: Ticket }) {
   const [tab, setTab] = useState<Tab>('ticket');
   const [reporting, setReporting] = useState(false);
+  const offline = useOffline();
   const queryClient = useQueryClient();
   const view = viewOf(ticket.progress);
   const p = ticket.progress;
@@ -479,7 +482,7 @@ function Detail({ ticket }: { ticket: Ticket }) {
           </Panel>
         </div>
       </div>
-      <button type="button" onClick={() => setReporting(true)} className={`${ghostBtn} self-start`}>
+      <button type="button" disabled={offline} onClick={() => setReporting(true)} className={`${ghostBtn} self-start`}>
         Report a broken ticket
       </button>
       {reporting && (

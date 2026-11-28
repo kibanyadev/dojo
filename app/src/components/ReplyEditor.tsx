@@ -3,6 +3,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { Mentor } from './Mentor';
 import { ME_KEY } from '../lib/me';
+import { useOffline } from '../lib/offline';
 import {
   itemKey,
   PATH_KEY,
@@ -167,6 +168,7 @@ function patchDraft(client: QueryClient, id: string, body: string, savedAt: stri
 /** The autosaved reply box and its review, shared by the writing task (L9) and the feedback round (L4). `lead` is the task or the message. */
 export function ReplyEditor({ item, lead }: { item: WorkItem; lead: ReactNode }) {
   const queryClient = useQueryClient();
+  const offline = useOffline();
   const reviewer = ('from' in item && item.from?.name) || 'Carmen';
   const work = item.work;
   const initial = work?.draft ?? work?.body ?? '';
@@ -339,10 +341,10 @@ export function ReplyEditor({ item, lead }: { item: WorkItem; lead: ReactNode })
             {atLimit ? `You reached the ${formatCount(MAX_CHARS)} character limit.` : ''}
           </div>
           <div className="flex flex-wrap gap-2.5">
-            <button type="button" onClick={() => void submit()} disabled={submitting || blocked || trimmedEmpty} className={primaryBtn}>
+            <button type="button" onClick={() => void submit()} disabled={submitting || blocked || trimmedEmpty || offline} className={primaryBtn}>
               {submitting ? 'Sending...' : 'Ask for review'}
             </button>
-            <button type="button" onClick={() => void flush()} disabled={submitting} className={quietBtn}>
+            <button type="button" onClick={() => void flush()} disabled={submitting || offline} className={quietBtn}>
               Save draft
             </button>
           </div>
