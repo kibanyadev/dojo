@@ -60,7 +60,7 @@ func ulPass(t *testing.T, c *cliClient, tok, item string) {
 }
 
 const unlockRowsSQL = "SELECT coalesce(string_agg(kind || ':' || ref || '|' || title || '|' || body || '|' || url || '|' || push_state, ';' ORDER BY ref), '') " +
-	"FROM inbox_items i JOIN learners l ON l.id = i.learner_id WHERE l.github_id = 1001"
+	"FROM inbox_items i JOIN learners l ON l.id = i.learner_id WHERE i.kind IN ('story','quiz') AND l.github_id = 1001"
 
 func TestFirstPassUnlocksStoryAndQuizIntegration(t *testing.T) {
 	c, tok := unlockFixture(t)
@@ -74,7 +74,7 @@ func TestFirstPassUnlocksStoryAndQuizIntegration(t *testing.T) {
 		t.Fatalf("before: %q", got)
 	}
 	ulPass(t, c, tok, "ul-role/a")
-	s.next("inbox", 5*time.Second)
+	drainUntilInbox(t, s)
 	want := "story:ul-role/f|Elena sent you feedback|Title ul-role/f|/story/ul-role/f|pending;" +
 		"quiz:ul-role/q1|Quiz ready: Title ul-role/q1|3 questions, about 6 minutes|/quiz/ul-role/q1|none;" +
 		"story:ul-role/s1|Elena sent you a message|Title ul-role/s1|/story/ul-role/s1|pending"
@@ -90,15 +90,16 @@ func TestFirstPassUnlocksStoryAndQuizIntegration(t *testing.T) {
 	asOwner(t, "UPDATE inbox_items SET read_at = now()")
 	post(t, c, tok, evStarted(evID(), "ul-role/a", "2026-11-23T11:00:00Z"))
 	ulPass(t, c, tok, "ul-role/a")
-	if got := asOwner(t, "SELECT count(*) FROM inbox_items WHERE read_at IS NULL"); got != "0" {
+	if got := asOwner(t, "SELECT count(*) FROM inbox_items WHERE kind IN ('story','quiz') AND read_at IS NULL"); got != "0" {
 		t.Fatalf("a revisit pass wrote rows: %s unread", got)
 	}
-	s.noInboxEvent(500 * time.Millisecond)
+	// The check item still sends progress and event: inbox here; drain them, the unlock rows prove nothing new was announced.
+	drainUntilInbox(t, s)
 
 	// The last ticket unlocks the quiz after it, and only it.
 	ulPass(t, c, tok, "ul-role/b")
-	s.next("inbox", 5*time.Second)
-	if got := asOwner(t, "SELECT string_agg(ref, ',' ORDER BY ref) FROM inbox_items WHERE read_at IS NULL"); got != "ul-role/q2" {
+	drainUntilInbox(t, s)
+	if got := asOwner(t, "SELECT string_agg(ref, ',' ORDER BY ref) FROM inbox_items WHERE kind IN ('story','quiz') AND read_at IS NULL"); got != "ul-role/q2" {
 		t.Fatalf("after b: %q", got)
 	}
 }
@@ -108,13 +109,13 @@ func TestUnlockIgnoresCompletedItemsReloadsAndOtherLearnersIntegration(t *testin
 	asOwner(t, "INSERT INTO item_completions (org_id, learner_id, item_id) SELECT org_id, id, 'ul-role/q1' FROM learners WHERE github_id = 1001")
 	// A catalog reload that places an item after a ticket the learner passed gives no row.
 	ulPass(t, c, tok, "ul-role/a")
-	if got := asOwner(t, "SELECT string_agg(ref, ',' ORDER BY ref) FROM inbox_items"); got != "ul-role/f,ul-role/s1" {
+	if got := asOwner(t, "SELECT string_agg(ref, ',' ORDER BY ref) FROM inbox_items WHERE kind IN ('story','quiz')"); got != "ul-role/f,ul-role/s1" {
 		t.Fatalf("completed quiz must not be announced: %q", got)
 	}
 	asOwner(t, "INSERT INTO catalog_items (id, org_id, role_id, kind, position, title, est_minutes, catalog_version, payload) "+
 		"SELECT 'ul-role/late', o.id, r.id, 'quiz', 9, 'Late', 4, '0123456789ab', '"+ulQuizPayload+"'::jsonb FROM orgs o, roles r WHERE o.slug = 'public' AND r.slug = 'ul-role'")
 	asOwner(t, "UPDATE catalog_items SET position = position + 10 WHERE id = 'ul-role/late'")
-	if got := asOwner(t, "SELECT count(*) FROM inbox_items"); got != "2" {
+	if got := asOwner(t, "SELECT count(*) FROM inbox_items WHERE kind IN ('story','quiz')"); got != "2" {
 		t.Fatalf("reload wrote rows: %s", got)
 	}
 
@@ -125,10 +126,29 @@ func TestUnlockStaysWithinTheLearnerIntegration(t *testing.T) {
 	asOwner(t, "INSERT INTO learners (org_id, github_id, github_login, username, email, age_confirmed_at, terms_accepted_at, terms_version) "+
 		"SELECT id, 1002, 'bob', 'bob', 'bob@example.test', now(), now(), '2026-11-20' FROM orgs WHERE slug = 'public'")
 	ulPass(t, c, tok, "ul-role/a")
-	if got := asOwner(t, "SELECT count(*) FROM inbox_items i JOIN learners l ON l.id = i.learner_id WHERE l.github_id = 1002"); got != "0" {
+	if got := asOwner(t, "SELECT count(*) FROM inbox_items i JOIN learners l ON l.id = i.learner_id WHERE i.kind IN ('story','quiz') AND l.github_id = 1002"); got != "0" {
 		t.Fatalf("bob has %s rows", got)
 	}
-	if got := asOwner(t, "SELECT count(*) FROM inbox_items i JOIN learners l ON l.id = i.learner_id WHERE l.github_id = 1001"); got != "3" {
+	if got := asOwner(t, "SELECT count(*) FROM inbox_items i JOIN learners l ON l.id = i.learner_id WHERE i.kind IN ('story','quiz') AND l.github_id = 1001"); got != "3" {
 		t.Fatalf("ada has %s rows", got)
+	}
+}
+
+// drainUntilInbox skips progress events (the check projection sends them too) until an inbox event arrives.
+func drainUntilInbox(t *testing.T, s *sseStream) {
+	t.Helper()
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case ev, ok := <-s.events:
+			if !ok {
+				t.Fatal("stream closed while waiting for inbox")
+			}
+			if ev.name == "inbox" {
+				return
+			}
+		case <-deadline:
+			t.Fatal("no inbox event within 5s")
+		}
 	}
 }
