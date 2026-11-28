@@ -79,6 +79,7 @@ func (s *Store) RecordEvents(ctx context.Context, learnerID pgtype.UUID, evs []E
 
 	rows := map[string]*TicketProgress{}
 	doctorChanged := map[string]string{}
+	checkItems := map[string]bool{}
 	for _, e := range evs {
 		_, err := q.InsertEvent(ctx, InsertEventParams{
 			OrgID: l.OrgID, LearnerID: l.ID, ClientEventID: e.ClientID, Type: e.Type,
@@ -130,6 +131,9 @@ func (s *Store) RecordEvents(ctx context.Context, learnerID pgtype.UUID, evs []E
 			}
 			continue
 		}
+		if e.Type == "check.run" && lastCheckApplies(cur, capAt(e.ClientAt, now)) {
+			checkItems[e.ItemID] = true
+		}
 		next := projectEvent(cur, l.OrgID, l.ID, e, now)
 		if cur == nil {
 			created, err := q.InsertTicketProgress(ctx, InsertTicketProgressParams{
@@ -165,6 +169,9 @@ func (s *Store) RecordEvents(ctx context.Context, learnerID pgtype.UUID, evs []E
 		return res, err
 	}
 	if err := notifyDoctor(ctx, tx, l.ID, doctorChanged); err != nil {
+		return res, err
+	}
+	if err := upsertCheckItems(ctx, tx, q, l.OrgID, l.ID, rows, checkItems, now); err != nil {
 		return res, err
 	}
 	if err := tx.Commit(ctx); err != nil {
